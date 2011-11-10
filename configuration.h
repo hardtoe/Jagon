@@ -184,7 +184,7 @@ char uuid[] = "00000000-0000-0000-0000-000000000000";
   //#define DEBUG_DISABLE_CHECK_DURING_TRAVEL //Debug the namesake feature, see above in this file
 #endif
 
-#define STEP_COMMAND_Q_SIZE 32
+#define STEP_COMMAND_Q_SIZE 64
 #define MOVE_COMMAND_Q_SIZE 16
 #define GCODE_Q_SIZE 8
 

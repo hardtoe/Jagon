@@ -22,6 +22,9 @@ class StepperDriver {
 
     CircularBuffer<StepCommand, STEP_COMMAND_Q_SIZE>* stepCommandBuffer;
 
+    boolean skippedLast;
+    byte skips;
+    
   public:
     StepperDriver(
       CircularBuffer<StepCommand, STEP_COMMAND_Q_SIZE>* stepCommandBuffer
@@ -111,10 +114,12 @@ class StepperDriver {
       } 
     }
       
-    inline volatile void interrupt() {
+    inline void interrupt() {
       StepCommand* currentCommand;
       
       if (stepCommandBuffer->notEmpty()) {
+        skippedLast = false;
+        
         currentCommand = stepCommandBuffer->peek(); 
 
         //if (currentCommand->hasNewEnableDirection()) {
@@ -153,7 +158,13 @@ class StepperDriver {
         yAxis.step(false);
         zAxis.step(false);
         eAxis.step(false);
-      } 
+      } else {
+        if (!skippedLast) {
+          Serial.println((unsigned int) skips++); 
+        }
+        
+        skippedLast = true;
+      }
     }
 };
 

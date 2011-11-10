@@ -94,51 +94,51 @@ class StepCommand {
     }  
 
     inline boolean xEnabled() {
-      return (stepCommand & 0x1);
+      return (stepCommand & 0x1) != 0;
     }
     
     inline boolean yEnabled() {
-      return (stepCommand & 0x2);
+      return (stepCommand & 0x2) != 0;
     }
     
     inline boolean zEnabled() {
-      return (stepCommand & 0x4);
+      return (stepCommand & 0x4) != 0;
     }
     
     inline boolean eEnabled() {
-      return (stepCommand & 0x8);
+      return (stepCommand & 0x8) != 0;
     }
     
     inline boolean xStep() {
-      return (stepCommand & 0x100);
+      return (stepCommand & 0x100) != 0;
     }
     
     inline boolean yStep() {
-      return (stepCommand & 0x200);
+      return (stepCommand & 0x200) != 0;
     }
     
     inline boolean zStep() {
-      return (stepCommand & 0x400);
+      return (stepCommand & 0x400) != 0;
     }
     
     inline boolean eStep() {
-      return (stepCommand & 0x800);
+      return (stepCommand & 0x800) != 0;
     }
 
     inline boolean xDir() {
-      return (stepCommand & 0x10);
+      return (stepCommand & 0x10) != 0;
     }
     
     inline boolean yDir() {
-      return (stepCommand & 0x20);
+      return (stepCommand & 0x20) != 0;
     }
     
     inline boolean zDir() {
-      return (stepCommand & 0x40);
+      return (stepCommand & 0x40) != 0;
     }
     
     inline boolean eDir() {
-      return (stepCommand & 0x80);
+      return (stepCommand & 0x80) != 0;
     }
 };
 

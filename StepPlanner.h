@@ -19,11 +19,7 @@ class StepPlanner {
     StepCommand prototypeStep;
     StepCommand* currentStep;  
     
-    Vec<float,4> previousLocation;
-    Vec<float,4> currentLocation;
-    Vec<float,4> finalLocation;
     unsigned int numSteps;
-    Vec<float,4> increment;
     
     byte longAxis;
       
@@ -37,6 +33,18 @@ class StepPlanner {
     unsigned int accelerationConstant;   
     byte minStepDelay;  
       
+      
+      
+      
+    long   
+      d1,   d2,   d3,   d4,
+      Ad1,  Ad2,  Ad3,  Ad4,
+      d1x2, d2x2, d3x2, d4x2,
+      dim1, dim2, dim3, dim4,
+      old1, old2, old3, old4,
+      new1, new2, new3, new4,
+      err1, err2, err3, err4;  
+
   public:
     StepPlanner(
       CircularBuffer<MoveCommand, MOVE_COMMAND_Q_SIZE>* moveCommandBuffer, 
@@ -48,9 +56,18 @@ class StepPlanner {
       this->moveCommandBuffer = moveCommandBuffer;
       this->stepCommandBuffer = stepCommandBuffer;
       
-      accelerationConstant = 50; // every 50 us, increment velocity
-      minStepDelay = 100;
+      accelerationConstant = 25; // every 25 us, increment velocity
+      minStepDelay = 55;
       PT_INIT(&state);
+      
+
+      d1 = 0;   d2 = 0;   d3 = 0;   d4 = 0;
+      Ad1 = 0;  Ad2 = 0;  Ad3 = 0;  Ad4 = 0;
+      d1x2 = 0; d2x2 = 0; d3x2 = 0; d4x2 = 0;
+      dim1 = 0; dim2 = 0; dim3 = 0; dim4 = 0;
+      old1 = 0; old2 = 0; old3 = 0; old4 = 0;
+      new1 = 0; new2 = 0; new3 = 0; new4 = 0;
+      err1 = 0; err2 = 0; err3 = 0; err4 = 0;  
     }
 
     int tick() {
@@ -86,24 +103,63 @@ class StepPlanner {
           prototypeStep.setEDir();    
         }
         
+       
         
-        // StepPlanner motions are all relative to the previous move
-        currentLocation = (float[]) {0, 0, 0, 0};
+        new1 = currentCommand->getXSteps(); 
+        new2 = currentCommand->getYSteps(); 
+        new3 = currentCommand->getZSteps(); 
+        new4 = currentCommand->getESteps();
         
-        // set the final location
-        finalLocation.set(0, currentCommand->getXSteps());
-        finalLocation.set(1, currentCommand->getYSteps());
-        finalLocation.set(2, currentCommand->getZSteps());
-        finalLocation.set(3, currentCommand->getESteps());
-        
-        numSteps = (finalLocation - currentLocation).absValue().maxReduce();
-        increment = (finalLocation - currentLocation) / numSteps;
 
-        currentVelocity = currentCommand->getVelocity();
-        currentStepDelay = fastDivide(currentCommand->getVelocity());
+        currentVelocity = 2000; //currentCommand->getVelocity();
+        currentStepDelay = fastDivide(currentVelocity);
         prototypeStep.setStepDelay(currentStepDelay);
         prototypeStep.enableAxis(0xF);  
         prototypeStep.setNewEnableDirection(true);
+        
+        
+        Serial.print("currentVelocity: ");
+        Serial.println(currentVelocity);
+        Serial.print("stepDelay: ");
+        Serial.println(currentStepDelay);
+
+        d1 = new1 - old1;
+        d2 = new2 - old2;
+        d3 = new3 - old3;
+        d4 = new4 - old4;
+            
+        Ad1 = abs(d1);
+        Ad2 = abs(d2);
+        Ad3 = abs(d3);
+        Ad4 = abs(d4);
+      
+        d1x2 = Ad1*2;
+        d2x2 = Ad2*2;
+        d3x2 = Ad3*2;
+        d4x2 = Ad4*2;      
+        
+        if ((Ad1>=Ad2) && (Ad1>=Ad3) && (Ad1>=Ad4)) {
+          err1 = d2x2 - Ad1;
+          err2 = d3x2 - Ad1;
+          err3 = d4x2 - Ad1;
+          numSteps = Ad1;
+        } else if ((Ad2>Ad1) && (Ad2>=Ad3) && (Ad2>=Ad4)) {
+          err1 = d1x2 - Ad2;
+          err2 = d3x2 - Ad2;
+          err3 = d4x2 - Ad2;
+          numSteps = Ad2;
+        } else if((Ad3>Ad1) && (Ad3>Ad2) && (Ad3>=Ad4)) {
+          err1 = d2x2 - Ad3;
+          err2 = d1x2 - Ad3;
+          err3 = d4x2 - Ad3;
+          numSteps = Ad3;
+        } else {
+          err1 = d1x2 - Ad4;
+          err2 = d2x2 - Ad4;
+          err3 = d3x2 - Ad4;
+          numSteps = Ad4;
+        }
+        
         
         for(
           numStepsLeft = 0;
@@ -114,20 +170,114 @@ class StepPlanner {
           PT_WAIT_UNTIL(&state, 
             stepCommandBuffer->notFull()
           );
-          
-          previousLocation =
-            currentLocation;
-          
-          currentLocation =
-            currentLocation + increment;
-          
+             
           currentStep =
             stepCommandBuffer->create();
 
           *currentStep = prototypeStep;
+
+
+          ////////////////////////////////////////////////////////////////////////////////////////////////////
+          ////////////////////////////////////////////////////////////////////////////////////////////////////
+          ////////////////////////////////////////////////////////////////////////////////////////////////////
+  if ((Ad1>=Ad2) && (Ad1>=Ad3) && (Ad1>=Ad4)) {
+    if (err1 > 0) {
+      currentStep->setYStep();
+      err1 -= d1x2;
+    }
+
+    if (err2 > 0) {
+      currentStep->setZStep();
+      err2 -= d1x2;
+    }
+
+    if (err3 > 0) {
+      currentStep->setEStep();
+      err3 -= d1x2;
+    }
+
+    err1 += d2x2;
+    err2 += d3x2;
+    err3 += d4x2;
+
+    currentStep->setXStep();
+    
+  } else if ((Ad2>Ad1) && (Ad2>=Ad3) && (Ad2>=Ad4)) {
+    if (err1 > 0) {
+      currentStep->setXStep();
+      err1 -= d2x2;
+    }
+
+    if (err2 > 0) {
+      currentStep->setZStep();
+      err2 -= d2x2;
+    }
+
+    if (err3 > 0) {
+      currentStep->setEStep();
+      err3 -= d2x2;
+    }
+
+    err1 += d1x2;
+    err2 += d3x2;
+    err3 += d4x2;
+
+    currentStep->setYStep();
+    
+  } else if((Ad3>Ad1) && (Ad3>Ad2) && (Ad3>=Ad4)) {
+    if (err1 > 0) {
+      currentStep->setYStep();
+      err1 -= d3x2;
+    }
+
+    if (err2 > 0) {
+      currentStep->setXStep();
+      err2 -= d3x2;
+    }
+
+    if (err3 > 0) {
+      currentStep->setEStep();
+      err3 -= d3x2;
+    }
+
+    err1 += d2x2;
+    err2 += d1x2;
+    err3 += d4x2;
+
+    currentStep->setZStep();
+    
+  } else {
+    if (err1 > 0) {
+      currentStep->setXStep();
+      err1 -= d4x2;
+    }
+
+    if (err2 > 0) {
+      currentStep->setYStep();
+      err2 -= d4x2;
+    }
+
+    if (err3 > 0) {
+      currentStep->setZStep();
+      err3 -= d4x2;
+    }
+
+    err1 += d1x2;
+    err2 += d2x2;
+    err3 += d3x2;
+
+    currentStep->setEStep();
+  }
+          ////////////////////////////////////////////////////////////////////////////////////////////////////
+          ////////////////////////////////////////////////////////////////////////////////////////////////////
+          ////////////////////////////////////////////////////////////////////////////////////////////////////
           
-          currentStep->setSteppingAxis(
-            previousLocation != currentLocation); 
+          
+          
+          
+          
+          
+          
 
           stepCommandBuffer->put();
 
@@ -439,7 +589,7 @@ inline unsigned int fastDivide(unsigned int divisor) {
       }
     } 
   } else {
-    return 1000000 / divisor;
+    return ((1000000) / divisor);
   }
 }
 
