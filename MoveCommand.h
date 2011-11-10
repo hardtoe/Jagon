@@ -7,7 +7,7 @@
 
 class MoveCommand : public Vec<long,4> {
   private:
-    float velocity;
+    unsigned int velocity;
  
   public: 
     void setSteps(Vec<long,4> steps) {
@@ -32,7 +32,7 @@ class MoveCommand : public Vec<long,4> {
       set(3, eSteps);
     }
     
-    void setVelocity(float velocity) {
+    void setVelocity(unsigned int velocity) {
       this->velocity = velocity; 
     }
     

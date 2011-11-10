@@ -5,25 +5,32 @@
 
 #include "Vec.h"
 
-class StepCommand : public Vec<boolean,4> {
+// stepCommand = {step[3:0],direction[3:0],enable[3:0],}
+class StepCommand {
   private:
-    int stepCommand;
-    int stepDelay;
+    unsigned int stepCommand;
+    unsigned int stepDelay;
+    boolean newEnableDirection;
  
   public: 
     inline void clear() {
        stepCommand = 0; 
-       set(0, false);
-       set(1, false);
-       set(2, false);
-       set(3, false);
+       newEnableDirection = true;
     }
 
     inline void setSteppingAxis(Vec<boolean,4> rhs) {
-      set(0, rhs.get(0));  
-      set(1, rhs.get(1));  
-      set(2, rhs.get(2));  
-      set(3, rhs.get(3));  
+      if (rhs.get(0)) setXStep();
+      if (rhs.get(1)) setYStep();
+      if (rhs.get(2)) setZStep();
+      if (rhs.get(3)) setEStep();
+    }
+
+    inline boolean hasNewEnableDirection() {
+        return newEnableDirection;
+    }
+
+    inline void setNewEnableDirection(boolean value) {
+       newEnableDirection = value; 
     }
 
     inline void setStepDelay(int stepDelay) {
@@ -39,99 +46,99 @@ class StepCommand : public Vec<boolean,4> {
     }
     
     inline void setXStep() {
-      set(0, true);
+      stepCommand |= 0x100;
     }
     
     inline void setYStep() {
-      set(1, true);
+      stepCommand |= 0x200;
     }
     
     inline void setZStep() {
-      set(2, true);
+      stepCommand |= 0x400;
     }
     
     inline void setEStep() {
-      set(3, true);
+      stepCommand |= 0x800;
     }
 
     inline void setXDir() {
-      stepCommand |= (1 << 8);
+      stepCommand |= 0x10;
     }
     
     inline void setYDir() {
-      stepCommand |= (1 << 9);
+      stepCommand |= 0x20;
     }
     
     inline void setZDir() {
-      stepCommand |= (1 << 10);
+      stepCommand |= 0x40;
     }
     
     inline void setEDir() {
-      stepCommand |= (1 << 11);
+      stepCommand |= 0x80;
     }  
 
     inline void clearXDir() {
-      stepCommand &= ~(1 << 8);
+      stepCommand &= ~0x10;
     }
     
     inline void clearYDir() {
-      stepCommand &= ~(1 << 9);
+      stepCommand &= ~0x20;
     }
     
     inline void clearZDir() {
-      stepCommand &= ~(1 << 10);
+      stepCommand &= ~0x40;
     }
     
     inline void clearEDir() {
-      stepCommand &= ~(1 << 11);
+      stepCommand &= ~0x80;
     }  
 
     inline boolean xEnabled() {
-      return (stepCommand >> 0) & 1;
+      return (stepCommand & 0x1);
     }
     
     inline boolean yEnabled() {
-      return (stepCommand >> 1) & 1;
+      return (stepCommand & 0x2);
     }
     
     inline boolean zEnabled() {
-      return (stepCommand >> 2) & 1;
+      return (stepCommand & 0x4);
     }
     
     inline boolean eEnabled() {
-      return (stepCommand >> 3) & 1;
+      return (stepCommand & 0x8);
     }
     
     inline boolean xStep() {
-      return get(0);
+      return (stepCommand & 0x100);
     }
     
     inline boolean yStep() {
-      return get(1);
+      return (stepCommand & 0x200);
     }
     
     inline boolean zStep() {
-      return get(2);
+      return (stepCommand & 0x400);
     }
     
     inline boolean eStep() {
-      return get(3);
+      return (stepCommand & 0x800);
     }
 
     inline boolean xDir() {
-      return (stepCommand >> 8) & 1;
+      return (stepCommand & 0x10);
     }
     
     inline boolean yDir() {
-      return (stepCommand >> 9) & 1;
+      return (stepCommand & 0x20);
     }
     
     inline boolean zDir() {
-      return (stepCommand >> 10) & 1;
+      return (stepCommand & 0x40);
     }
     
     inline boolean eDir() {
-      return (stepCommand >> 11) & 1;
+      return (stepCommand & 0x80);
     }
 };
 

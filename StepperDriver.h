@@ -111,35 +111,48 @@ class StepperDriver {
       } 
     }
       
-    inline void interrupt() {
+    inline volatile void interrupt() {
       StepCommand* currentCommand;
       
       if (stepCommandBuffer->notEmpty()) {
         currentCommand = stepCommandBuffer->peek(); 
 
-        xAxis.enable(!currentCommand->xEnabled());
-        yAxis.enable(!currentCommand->yEnabled());
-        zAxis.enable(!currentCommand->zEnabled());
-        eAxis.enable(!currentCommand->eEnabled());
+        //if (currentCommand->hasNewEnableDirection()) {
+          xAxis.enable(!currentCommand->xEnabled());
+          yAxis.enable(!currentCommand->yEnabled());
+          zAxis.enable(!currentCommand->zEnabled());
+          eAxis.enable(!currentCommand->eEnabled());
         
-        xAxis.setDirection(currentCommand->xDir());
-        yAxis.setDirection(currentCommand->yDir());
-        zAxis.setDirection(currentCommand->zDir());
-        eAxis.setDirection(currentCommand->eDir());     
+          xAxis.setDirection(currentCommand->xDir());
+          yAxis.setDirection(currentCommand->yDir());
+          zAxis.setDirection(currentCommand->zDir());
+          eAxis.setDirection(currentCommand->eDir());     
+        //}
 
-        xAxis.step(currentCommand->xStep() && ((currentCommand->xDir() ^ INVERT_X_DIR) || !xAtMin()));
-        yAxis.step(currentCommand->yStep() && ((currentCommand->yDir() ^ INVERT_Y_DIR) || !yAtMin()));
-        zAxis.step(currentCommand->zStep() && ((currentCommand->zDir() ^ INVERT_Z_DIR) || !zAtMin()));
-        eAxis.step(currentCommand->eStep());
+        if (currentCommand->xStep() && ((currentCommand->xDir() ^ INVERT_X_DIR) || !xAtMin())) {
+          xAxis.step(true);
+        }
+        
+        if (currentCommand->yStep() && ((currentCommand->yDir() ^ INVERT_Y_DIR) || !yAtMin())) {
+          yAxis.step(true);
+        }
+        
+        if (currentCommand->zStep() && ((currentCommand->zDir() ^ INVERT_Z_DIR) || !zAtMin())) {
+          zAxis.step(true);
+        }
+        
+        if (currentCommand->eStep()) {
+          eAxis.step(true);
+        }
+
+        setNextStepDelay(currentCommand->getStepDelay());
+        
+        stepCommandBuffer->remove(); 
 
         xAxis.step(false);
         yAxis.step(false);
         zAxis.step(false);
         eAxis.step(false);
-     
-        setNextStepDelay(currentCommand->getStepDelay());
-        
-        stepCommandBuffer->remove(); 
       } 
     }
 };
