@@ -5,32 +5,35 @@
 
 #include "Vec.h"
 
+
 // stepCommand = {step[3:0],direction[3:0],enable[3:0],}
 class StepCommand {
   private:
     unsigned int stepCommand;
     unsigned int stepDelay;
-    boolean newEnableDirection;
+
  
   public: 
     inline void clear() {
        stepCommand = 0; 
-       newEnableDirection = true;
+       setNewEnableDirection();
     }
 
-    inline void setSteppingAxis(Vec<boolean,4> rhs) {
-      if (rhs.get(0)) setXStep();
-      if (rhs.get(1)) setYStep();
-      if (rhs.get(2)) setZStep();
-      if (rhs.get(3)) setEStep();
+    inline void setPrototype(StepCommand rhs) {
+      stepCommand = rhs.stepCommand & 0x10FF;
+      stepDelay = rhs.stepDelay;
     }
 
     inline boolean hasNewEnableDirection() {
-        return newEnableDirection;
+        return (stepCommand & 0x1000) != 0;
     }
 
-    inline void setNewEnableDirection(boolean value) {
-       newEnableDirection = value; 
+    inline void setNewEnableDirection() {
+       stepCommand |= 0x1000; 
+    }
+
+    inline void clearNewEnableDirection() {
+       stepCommand &= ~0x1000; 
     }
 
     inline void setStepDelay(int stepDelay) {

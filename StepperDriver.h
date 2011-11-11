@@ -15,10 +15,10 @@
 
 class StepperDriver {
   private:
-    PololuStepper(X_STEP_PIN, X_DIR_PIN, X_ENABLE_PIN) xAxis;
-    PololuStepper(Y_STEP_PIN, Y_DIR_PIN, Y_ENABLE_PIN) yAxis;
-    PololuStepper(Z_STEP_PIN, Z_DIR_PIN, Z_ENABLE_PIN) zAxis;
-    PololuStepper(E_STEP_PIN, E_DIR_PIN, E_ENABLE_PIN) eAxis;
+    PololuStepper(X_STEP_PIN, X_DIR_PIN, X_ENABLE_PIN, INVERT_X_DIR) xAxis;
+    PololuStepper(Y_STEP_PIN, Y_DIR_PIN, Y_ENABLE_PIN, INVERT_Y_DIR) yAxis;
+    PololuStepper(Z_STEP_PIN, Z_DIR_PIN, Z_ENABLE_PIN, INVERT_Z_DIR) zAxis;
+    PololuStepper(E_STEP_PIN, E_DIR_PIN, E_ENABLE_PIN, INVERT_E_DIR) eAxis;
 
     CircularBuffer<StepCommand, STEP_COMMAND_Q_SIZE>* stepCommandBuffer;
 
@@ -117,32 +117,30 @@ class StepperDriver {
     inline void interrupt() {
       StepCommand* currentCommand;
       
-      if (stepCommandBuffer->notEmpty()) {
-        skippedLast = false;
-        
+      if (stepCommandBuffer->notEmpty()) {     
         currentCommand = stepCommandBuffer->peek(); 
 
-        //if (currentCommand->hasNewEnableDirection()) {
+        if (currentCommand->hasNewEnableDirection()) {            
           xAxis.enable(!currentCommand->xEnabled());
           yAxis.enable(!currentCommand->yEnabled());
           zAxis.enable(!currentCommand->zEnabled());
-          eAxis.enable(!currentCommand->eEnabled());
-        
-          xAxis.setDirection(currentCommand->xDir());
-          yAxis.setDirection(currentCommand->yDir());
-          zAxis.setDirection(currentCommand->zDir());
-          eAxis.setDirection(currentCommand->eDir());     
-        //}
+          eAxis.enable(!currentCommand->eEnabled());       
+        }   
+             
+        xAxis.setDirection(currentCommand->xDir());
+        yAxis.setDirection(currentCommand->yDir());
+        zAxis.setDirection(currentCommand->zDir());
+        eAxis.setDirection(currentCommand->eDir());   
 
-        if (currentCommand->xStep() && ((currentCommand->xDir() ^ INVERT_X_DIR) || !xAtMin())) {
+        if (currentCommand->xStep() && (!xAtMin() || xAxis.getDirection())) {
           xAxis.step(true);
         }
         
-        if (currentCommand->yStep() && ((currentCommand->yDir() ^ INVERT_Y_DIR) || !yAtMin())) {
+        if (currentCommand->yStep() && (!yAtMin() || yAxis.getDirection())) {
           yAxis.step(true);
         }
         
-        if (currentCommand->zStep() && ((currentCommand->zDir() ^ INVERT_Z_DIR) || !zAtMin())) {
+        if (currentCommand->zStep() && (!zAtMin() || zAxis.getDirection())) {
           zAxis.step(true);
         }
         
@@ -158,6 +156,9 @@ class StepperDriver {
         yAxis.step(false);
         zAxis.step(false);
         eAxis.step(false);
+        
+        skippedLast = false;
+        
       } else {
         if (!skippedLast) {
           Serial.println((unsigned int) skips++); 

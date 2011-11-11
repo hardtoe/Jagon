@@ -9,9 +9,13 @@
 #include "StepCommand.h"
 #include "Vec.h"
 
+#define VELOCITY_RESOLUTION 32
+#define MIN_STEP_DELAY 35
+
 class StepPlanner {
   private:
     struct pt state;
+    struct pt subState;
     CircularBuffer<MoveCommand, MOVE_COMMAND_Q_SIZE>* moveCommandBuffer;
     CircularBuffer<StepCommand, STEP_COMMAND_Q_SIZE>* stepCommandBuffer;
       
@@ -19,30 +23,23 @@ class StepPlanner {
     StepCommand prototypeStep;
     StepCommand* currentStep;  
     
-    unsigned int numSteps;
+    
+    long numSteps;
     
     byte longAxis;
       
-    unsigned int numStepsLeft;  
+    long numStepsLeft;  
       
     unsigned int currentStepDelay;
     unsigned int currentVelocity;
     unsigned int minimumStepDelay; 
-    unsigned long currentVelocityError;
+    unsigned int currentVelocityError;
  
-    unsigned int accelerationConstant;   
-    byte minStepDelay;  
-      
-      
-      
-      
+    unsigned int  accelerationConstant;   
+
     long   
-      d1,   d2,   d3,   d4,
       Ad1,  Ad2,  Ad3,  Ad4,
       d1x2, d2x2, d3x2, d4x2,
-      dim1, dim2, dim3, dim4,
-      old1, old2, old3, old4,
-      new1, new2, new3, new4,
       err1, err2, err3, err4;  
 
   public:
@@ -56,18 +53,9 @@ class StepPlanner {
       this->moveCommandBuffer = moveCommandBuffer;
       this->stepCommandBuffer = stepCommandBuffer;
       
-      accelerationConstant = 25; // every 25 us, increment velocity
-      minStepDelay = 55;
+      accelerationConstant = 8 * VELOCITY_RESOLUTION; // every 8 * VELOCITY_RESOLUTION us, increment velocity by VELOCITY_RESOLUTION
       PT_INIT(&state);
-      
-
-      d1 = 0;   d2 = 0;   d3 = 0;   d4 = 0;
-      Ad1 = 0;  Ad2 = 0;  Ad3 = 0;  Ad4 = 0;
-      d1x2 = 0; d2x2 = 0; d3x2 = 0; d4x2 = 0;
-      dim1 = 0; dim2 = 0; dim3 = 0; dim4 = 0;
-      old1 = 0; old2 = 0; old3 = 0; old4 = 0;
-      new1 = 0; new2 = 0; new3 = 0; new4 = 0;
-      err1 = 0; err2 = 0; err3 = 0; err4 = 0;  
+      PT_INIT(&subState);
     }
 
     int tick() {
@@ -87,253 +75,330 @@ class StepPlanner {
         // setup our prototype step
         prototypeStep.clear(); 
         
-        if (currentCommand->getXSteps() >= 0 ^ INVERT_X_DIR) {
+        if (currentCommand->getXSteps() >= 0) {
           prototypeStep.setXDir();    
         }
         
-        if (currentCommand->getYSteps() >= 0 ^ INVERT_Y_DIR) {
+        if (currentCommand->getYSteps() >= 0) {
           prototypeStep.setYDir();    
         }
         
-        if (currentCommand->getZSteps() >= 0 ^ INVERT_Z_DIR) {
+        if (currentCommand->getZSteps() >= 0) {
           prototypeStep.setZDir();    
         }
         
-        if (currentCommand->getESteps() >= 0 ^ INVERT_E_DIR) {
+        if (currentCommand->getESteps() >= 0) {
           prototypeStep.setEDir();    
         }
-        
-       
-        
-        new1 = currentCommand->getXSteps(); 
-        new2 = currentCommand->getYSteps(); 
-        new3 = currentCommand->getZSteps(); 
-        new4 = currentCommand->getESteps();
-        
 
         currentVelocity = 2000; //currentCommand->getVelocity();
         currentStepDelay = fastDivide(currentVelocity);
         prototypeStep.setStepDelay(currentStepDelay);
-        prototypeStep.enableAxis(0xF);  
-        prototypeStep.setNewEnableDirection(true);
-        
-        
-        Serial.print("currentVelocity: ");
-        Serial.println(currentVelocity);
-        Serial.print("stepDelay: ");
-        Serial.println(currentStepDelay);
-
-        d1 = new1 - old1;
-        d2 = new2 - old2;
-        d3 = new3 - old3;
-        d4 = new4 - old4;
-            
-        Ad1 = abs(d1);
-        Ad2 = abs(d2);
-        Ad3 = abs(d3);
-        Ad4 = abs(d4);
+        prototypeStep.enableAxis(0xF);
       
-        d1x2 = Ad1*2;
-        d2x2 = Ad2*2;
-        d3x2 = Ad3*2;
-        d4x2 = Ad4*2;      
+        prototypeStep.setNewEnableDirection();
+
+        Ad1 = abs(currentCommand->getXSteps());
+        Ad2 = abs(currentCommand->getYSteps());
+        Ad3 = abs(currentCommand->getZSteps());
+        Ad4 = abs(currentCommand->getESteps());
+      
+        d1x2 = Ad1 * 2;
+        d2x2 = Ad2 * 2;
+        d3x2 = Ad3 * 2;
+        d4x2 = Ad4 * 2;      
         
-        if ((Ad1>=Ad2) && (Ad1>=Ad3) && (Ad1>=Ad4)) {
+        if ((Ad1 >= Ad2) && (Ad1 >= Ad3) && (Ad1 >= Ad4)) {
           err1 = d2x2 - Ad1;
           err2 = d3x2 - Ad1;
           err3 = d4x2 - Ad1;
           numSteps = Ad1;
-        } else if ((Ad2>Ad1) && (Ad2>=Ad3) && (Ad2>=Ad4)) {
+          
+          PT_SPAWN(&state, &subState, xPriMove());
+   
+          
+        } else if ((Ad2 >= Ad3) && (Ad2 >= Ad4)) {
           err1 = d1x2 - Ad2;
           err2 = d3x2 - Ad2;
           err3 = d4x2 - Ad2;
           numSteps = Ad2;
-        } else if((Ad3>Ad1) && (Ad3>Ad2) && (Ad3>=Ad4)) {
+          
+          PT_SPAWN(&state, &subState, yPriMove());
+          
+        } else if(Ad3 >= Ad4) {
           err1 = d2x2 - Ad3;
           err2 = d1x2 - Ad3;
           err3 = d4x2 - Ad3;
           numSteps = Ad3;
+          
+          PT_SPAWN(&state, &subState, zPriMove());
+          
         } else {
           err1 = d1x2 - Ad4;
           err2 = d2x2 - Ad4;
           err3 = d3x2 - Ad4;
           numSteps = Ad4;
+          
+          PT_SPAWN(&state, &subState, ePriMove());
         }
-        
-        
-        for(
-          numStepsLeft = 0;
-          numStepsLeft < numSteps;
-          numStepsLeft++
-        ) {
-          // wait until we have space in the step command buffer
-          PT_WAIT_UNTIL(&state, 
-            stepCommandBuffer->notFull()
-          );
-             
-          currentStep =
-            stepCommandBuffer->create();
 
-          *currentStep = prototypeStep;
-
-
-          ////////////////////////////////////////////////////////////////////////////////////////////////////
-          ////////////////////////////////////////////////////////////////////////////////////////////////////
-          ////////////////////////////////////////////////////////////////////////////////////////////////////
-  if ((Ad1>=Ad2) && (Ad1>=Ad3) && (Ad1>=Ad4)) {
-    if (err1 > 0) {
-      currentStep->setYStep();
-      err1 -= d1x2;
-    }
-
-    if (err2 > 0) {
-      currentStep->setZStep();
-      err2 -= d1x2;
-    }
-
-    if (err3 > 0) {
-      currentStep->setEStep();
-      err3 -= d1x2;
-    }
-
-    err1 += d2x2;
-    err2 += d3x2;
-    err3 += d4x2;
-
-    currentStep->setXStep();
-    
-  } else if ((Ad2>Ad1) && (Ad2>=Ad3) && (Ad2>=Ad4)) {
-    if (err1 > 0) {
-      currentStep->setXStep();
-      err1 -= d2x2;
-    }
-
-    if (err2 > 0) {
-      currentStep->setZStep();
-      err2 -= d2x2;
-    }
-
-    if (err3 > 0) {
-      currentStep->setEStep();
-      err3 -= d2x2;
-    }
-
-    err1 += d1x2;
-    err2 += d3x2;
-    err3 += d4x2;
-
-    currentStep->setYStep();
-    
-  } else if((Ad3>Ad1) && (Ad3>Ad2) && (Ad3>=Ad4)) {
-    if (err1 > 0) {
-      currentStep->setYStep();
-      err1 -= d3x2;
-    }
-
-    if (err2 > 0) {
-      currentStep->setXStep();
-      err2 -= d3x2;
-    }
-
-    if (err3 > 0) {
-      currentStep->setEStep();
-      err3 -= d3x2;
-    }
-
-    err1 += d2x2;
-    err2 += d1x2;
-    err3 += d4x2;
-
-    currentStep->setZStep();
-    
-  } else {
-    if (err1 > 0) {
-      currentStep->setXStep();
-      err1 -= d4x2;
-    }
-
-    if (err2 > 0) {
-      currentStep->setYStep();
-      err2 -= d4x2;
-    }
-
-    if (err3 > 0) {
-      currentStep->setZStep();
-      err3 -= d4x2;
-    }
-
-    err1 += d1x2;
-    err2 += d2x2;
-    err3 += d3x2;
-
-    currentStep->setEStep();
-  }
-          ////////////////////////////////////////////////////////////////////////////////////////////////////
-          ////////////////////////////////////////////////////////////////////////////////////////////////////
-          ////////////////////////////////////////////////////////////////////////////////////////////////////
-          
-          
-          
-          
-          
-          
-          
-
-          stepCommandBuffer->put();
-
-          prototypeStep.setNewEnableDirection(false);
-          
-          // check if we need to update velocity
-          currentVelocityError +=  
-            currentStepDelay;
-            
-          if (currentVelocityError > accelerationConstant) {
-            do {
-              currentVelocityError -= accelerationConstant;
-              
-              if (numStepsLeft < (numSteps >> 1)) {
-                currentVelocity++;
-              } else {
-                currentVelocity--;
-              }
-            } while (currentVelocityError > accelerationConstant);
-             
-            currentStepDelay = fastDivide(currentVelocity);
-          
-            if (currentStepDelay >= minStepDelay) {  
-              prototypeStep.setStepDelay(currentStepDelay);
-            }
-          }
-        }
-         
         moveCommandBuffer->remove();
       }
       
       PT_END(&state);
     }
     
+    int xPriMove() {
+      PT_BEGIN(&subState);
+      
+      for(
+        numStepsLeft = 0;
+        numStepsLeft < numSteps;
+        numStepsLeft++
+      ) {
+        // wait until we have space in the step command buffer
+        PT_WAIT_UNTIL(&subState, 
+          stepCommandBuffer->notFull()
+        );
+           
+        currentStep =
+          stepCommandBuffer->create();
 
-inline unsigned int fastDivide(unsigned int divisor) {
-  if (divisor >= 40000) {
-    if (divisor >= 50000) {
-      return 20;
+        currentStep->setPrototype(prototypeStep);
+
+        //////////
+        // X
+        if (err1 > 0) {
+          currentStep->setYStep();
+          err1 -= d1x2;
+        }
+    
+        if (err2 > 0) {
+          currentStep->setZStep();
+          err2 -= d1x2;
+        }
+    
+        if (err3 > 0) {
+          currentStep->setEStep();
+          err3 -= d1x2;
+        }
+    
+        err1 += d2x2;
+        err2 += d3x2;
+        err3 += d4x2;
+    
+        currentStep->setXStep();
   
-    } else if (divisor >= 47619) {
-      return 21;
+        stepCommandBuffer->put();
+        
+        // don't need to waste time setting IO registers for DIR or ENABLE for the rest of this move
+        prototypeStep.clearNewEnableDirection();
   
-    } else if (divisor >= 45455) {
-      return 22;
+        calculateVelocity();
+      }      
+      
+      PT_END(&subState);
+    }
+    
+    int yPriMove() {
+      PT_BEGIN(&subState);
+      
+      for(
+        numStepsLeft = 0;
+        numStepsLeft < numSteps;
+        numStepsLeft++
+      ) {
+        // wait until we have space in the step command buffer
+        PT_WAIT_UNTIL(&subState, 
+          stepCommandBuffer->notFull()
+        );
+           
+        currentStep =
+          stepCommandBuffer->create();
+
+        currentStep->setPrototype(prototypeStep);
+
+        //////////
+        // Y
+        if (err1 > 0) {
+          currentStep->setXStep();
+          err1 -= d2x2;
+        }
+    
+        if (err2 > 0) {
+          currentStep->setZStep();
+          err2 -= d2x2;
+        }
+    
+        if (err3 > 0) {
+          currentStep->setEStep();
+          err3 -= d2x2;
+        }
+    
+        err1 += d1x2;
+        err2 += d3x2;
+        err3 += d4x2;
+    
+        currentStep->setYStep();
+
+        stepCommandBuffer->put();
+        
+        // don't need to waste time setting IO registers for DIR or ENABLE for the rest of this move
+        prototypeStep.clearNewEnableDirection();
   
-    } else if (divisor >= 43478) {
-      return 23;
+        calculateVelocity();
+      }      
+      
+      PT_END(&subState);
+    }
+    
+    int zPriMove() {
+      PT_BEGIN(&subState);
+      
+      for(
+        numStepsLeft = 0;
+        numStepsLeft < numSteps;
+        numStepsLeft++
+      ) {
+        // wait until we have space in the step command buffer
+        PT_WAIT_UNTIL(&subState, 
+          stepCommandBuffer->notFull()
+        );
+           
+        currentStep =
+          stepCommandBuffer->create();
+
+        currentStep->setPrototype(prototypeStep);
+
+        //////////
+        // Z
+        if (err1 > 0) {
+          currentStep->setYStep();
+          err1 -= d3x2;
+        }
+    
+        if (err2 > 0) {
+          currentStep->setXStep();
+          err2 -= d3x2;
+        }
+    
+        if (err3 > 0) {
+          currentStep->setEStep();
+          err3 -= d3x2;
+        }
+    
+        err1 += d2x2;
+        err2 += d1x2;
+        err3 += d4x2;
+    
+        currentStep->setZStep();
+
+        stepCommandBuffer->put();
+        
+        // don't need to waste time setting IO registers for DIR or ENABLE for the rest of this move
+        prototypeStep.clearNewEnableDirection();
   
-    } else if (divisor >= 41667) {
-      return 24;
+        calculateVelocity();
+      }      
+      
+      PT_END(&subState);
+    }
+    
+    int ePriMove() {
+      PT_BEGIN(&subState);
+      
+      for(
+        numStepsLeft = 0;
+        numStepsLeft < numSteps;
+        numStepsLeft++
+      ) {
+        // wait until we have space in the step command buffer
+        PT_WAIT_UNTIL(&subState, 
+          stepCommandBuffer->notFull()
+        );
+           
+        currentStep =
+          stepCommandBuffer->create();
+
+        currentStep->setPrototype(prototypeStep);
+
+        //////////
+        // E
+        if (err1 > 0) {
+          currentStep->setXStep();
+          err1 -= d4x2;
+        }
+    
+        if (err2 > 0) {
+          currentStep->setYStep();
+          err2 -= d4x2;
+        }
+    
+        if (err3 > 0) {
+          currentStep->setZStep();
+          err3 -= d4x2;
+        }
+    
+        err1 += d1x2;
+        err2 += d2x2;
+        err3 += d3x2;
+    
+        currentStep->setEStep();
+
+        stepCommandBuffer->put();
+        
+        // don't need to waste time setting IO registers for DIR or ENABLE for the rest of this move
+        prototypeStep.clearNewEnableDirection();
   
-    } else {
-      return 25;
+        calculateVelocity();
+      }      
+      
+      PT_END(&subState);
+    }
+    
+    inline void calculateVelocity() {
+      // check if we need to update velocity
+      currentVelocityError +=  
+        currentStepDelay;
+        
+      if (currentVelocityError > accelerationConstant) {
+        do {
+          currentVelocityError -= accelerationConstant;
+          
+          if (numStepsLeft < (numSteps >> 1)) {
+            currentVelocity += VELOCITY_RESOLUTION;
+          } else {
+            currentVelocity -= VELOCITY_RESOLUTION;
+          }
+        } while (currentVelocityError > accelerationConstant);
+         
+        currentStepDelay = fastDivide(currentVelocity);
+        prototypeStep.setStepDelay(currentStepDelay);
+      }  
     }
 
+#define DIVIDEND (F_CPU/16)
+
+inline unsigned int fastDivide(unsigned int divisor) {
+  if (divisor >= (DIVIDEND/(MIN_STEP_DELAY+5))) {
+    if (divisor >= DIVIDEND/MIN_STEP_DELAY) {
+      return MIN_STEP_DELAY; 
+      
+    } else if (divisor >= DIVIDEND/(MIN_STEP_DELAY+1)) {
+      return (MIN_STEP_DELAY+1); 
+      
+    } else if (divisor >= DIVIDEND/(MIN_STEP_DELAY+2)) {
+      return (MIN_STEP_DELAY+2); 
+      
+    } else if (divisor >= DIVIDEND/(MIN_STEP_DELAY+3)) {
+      return (MIN_STEP_DELAY+3); 
+      
+    } else if (divisor >= DIVIDEND/(MIN_STEP_DELAY+4)) {
+      return (MIN_STEP_DELAY+4); 
+      
+    } else {
+      return (MIN_STEP_DELAY+5);
+    }
   } else if (divisor > 11236) { 
     if (divisor > 17544) { 
       if (divisor > 24390) {          

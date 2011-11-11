@@ -50,13 +50,20 @@ void TimerOne::initialize(long microseconds)
 {
   TCCR1A = 0;                 // clear control register A 
   TCCR1B = _BV(WGM13);        // set mode 8: phase and frequency correct pwm, stop the timer
+  
+  // set prescale of 8
+  TCCR1B &= ~(_BV(CS10) | _BV(CS11) | _BV(CS12));
+  TCCR1B |= _BV(CS11); 
+  
   setPeriod(microseconds);
 }
 
 
-void TimerOne::setPeriod(long microseconds)		// AR modified for atomic access
+
+
+/*
+void TimerOne::setPeriod(long cycles)		// AR modified for atomic access
 {
-  
   long cycles = (F_CPU / 2000000) * microseconds;                                // the counter runs backwards after TOP, interrupt is at BOTTOM so divide microseconds by 2
   if(cycles < RESOLUTION)              clockSelectBits = _BV(CS10);              // no prescale, full xtal
   else if((cycles >>= 3) < RESOLUTION) clockSelectBits = _BV(CS11);              // prescale by /8
@@ -73,7 +80,7 @@ void TimerOne::setPeriod(long microseconds)		// AR modified for atomic access
   TCCR1B &= ~(_BV(CS10) | _BV(CS11) | _BV(CS12));
   TCCR1B |= clockSelectBits;                                          // reset clock select register, and starts the clock
 }
-
+*/
 void TimerOne::setPwmDuty(char pin, int duty)
 {
   unsigned long dutyCycle = pwmPeriod;

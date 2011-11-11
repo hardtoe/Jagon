@@ -9,8 +9,8 @@ template<class Object, int maxSize>
 class CircularBuffer {
   private:
     volatile byte currentSize;
-    byte enqueuePointer;
-    byte dequeuePointer;
+    volatile byte enqueuePointer;
+    volatile byte dequeuePointer;
     Object buffer[maxSize];
   
   public:
@@ -35,7 +35,7 @@ class CircularBuffer {
       
       enqueuePointer =
         (enqueuePointer + 1) % maxSize;
-          
+      
       currentSize++;  
     }
     
@@ -55,17 +55,13 @@ class CircularBuffer {
       return &(buffer[dequeuePointer]);
     }
     
-    inline Object* remove() {
+    inline void remove() {
       ASSERT(notEmpty());
       
-      Object* removedObject = peek();
-     
       currentSize--;
         
       dequeuePointer = 
         (dequeuePointer + 1) % maxSize;
-      
-      return removedObject;
     }
 };
 

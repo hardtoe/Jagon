@@ -61,7 +61,12 @@ class TimerOne
     void disablePwm(char pin);
     void attachInterrupt(void (*isr)(), long microseconds=-1);
     void detachInterrupt();
-    void setPeriod(long microseconds);
+    
+    inline void setPeriod(long cycles)		
+    {                                      
+      ICR1 = cycles;                                       
+    }
+    
     void setPwmDuty(char pin, int duty);
     void (*isrCallback)();
 };
