@@ -9,8 +9,35 @@ class MoveCommand : public Vec<long,4> {
   private:
     unsigned int velocity;
     int acceleration;
+    long accelDistance;
+    long coastDistance;
+    long decelDistance;    
  
   public: 
+    void setAccelDistance(long accelDistance) {
+      this->accelDistance = accelDistance;  
+    }
+    
+    void setCoastDistance(long coastDistance) {
+      this->coastDistance = coastDistance;  
+    }
+    
+    void setDecelDistance(long decelDistance) {
+      this->decelDistance = decelDistance;  
+    } 
+    
+    long getAccelDistance() {
+      return this->accelDistance;  
+    }
+    
+    long getCoastDistance() {
+      return this->coastDistance;  
+    }
+    
+    long getDecelDistance() {
+      return this->decelDistance;  
+    }
+  
     void setSteps(Vec<long,4> steps) {
       for (int i = 0; i < 4; i++) {
         set(i, steps.get(i));

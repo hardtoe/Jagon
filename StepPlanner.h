@@ -30,12 +30,13 @@ class StepPlanner {
       
     long numStepsLeft;  
       
-    unsigned long currentStepDelay;
     unsigned long currentVelocity;
-    unsigned long maxVelocity;
     unsigned long currentVelocityError;
  
     unsigned int  accelerationConstant;   
+    
+    boolean coasting;
+    boolean accelerating;
 
     long   
       Ad1,  Ad2,  Ad3,  Ad4,
@@ -93,8 +94,6 @@ class StepPlanner {
           prototypeStep.setEDir();    
         }
         
-        maxVelocity = currentCommand->getVelocity();
-        
         prototypeStep.enableAxis(0xF);
       
         prototypeStep.setNewEnableDirection();
@@ -115,11 +114,20 @@ class StepPlanner {
           err3 = d4x2 - Ad1;
           numSteps = Ad1;
           
-          currentVelocity = min(max_start_speed_units_per_second[0] * axis_steps_per_unit[0], maxVelocity);
-          currentStepDelay = fastDivide(currentVelocity);
-          prototypeStep.setStepDelay(currentStepDelay);
-          PT_SPAWN(&state, &subState, xPriMove());
-   
+          currentVelocity = currentCommand->getVelocity();
+          prototypeStep.setStepDelay(fastDivide(currentVelocity));
+          
+          coasting = false;
+          accelerating = true;
+          PT_SPAWN(&state, &subState, xPriMove(0, currentCommand->getAccelDistance()));
+          
+          coasting = true;
+          accelerating = false;
+          PT_SPAWN(&state, &subState, xPriMove(currentCommand->getAccelDistance(), currentCommand->getCoastDistance()));
+          
+          coasting = false;
+          accelerating = false;
+          PT_SPAWN(&state, &subState, xPriMove(currentCommand->getCoastDistance(), numSteps));
           
         } else if ((Ad2 >= Ad3) && (Ad2 >= Ad4)) {
           err1 = d1x2 - Ad2;
@@ -127,10 +135,20 @@ class StepPlanner {
           err3 = d4x2 - Ad2;
           numSteps = Ad2;
           
-          currentVelocity = min(max_start_speed_units_per_second[1] * axis_steps_per_unit[1], maxVelocity);
-          currentStepDelay = fastDivide(currentVelocity);
-          prototypeStep.setStepDelay(currentStepDelay);
-          PT_SPAWN(&state, &subState, yPriMove());
+          currentVelocity = currentCommand->getVelocity();
+          prototypeStep.setStepDelay(fastDivide(currentVelocity));
+          
+          coasting = false;
+          accelerating = true;
+          PT_SPAWN(&state, &subState, yPriMove(0, currentCommand->getAccelDistance()));
+          
+          coasting = true;
+          accelerating = false;
+          PT_SPAWN(&state, &subState, yPriMove(currentCommand->getAccelDistance(), currentCommand->getCoastDistance()));
+          
+          coasting = false;
+          accelerating = false;
+          PT_SPAWN(&state, &subState, yPriMove(currentCommand->getCoastDistance(), numSteps));
           
         } else if(Ad3 >= Ad4) {
           err1 = d2x2 - Ad3;
@@ -138,10 +156,20 @@ class StepPlanner {
           err3 = d4x2 - Ad3;
           numSteps = Ad3;
           
-          currentVelocity = min(max_start_speed_units_per_second[2] * axis_steps_per_unit[2], maxVelocity);
-          currentStepDelay = fastDivide(currentVelocity);
-          prototypeStep.setStepDelay(currentStepDelay);
-          PT_SPAWN(&state, &subState, zPriMove());
+          currentVelocity = currentCommand->getVelocity();
+          prototypeStep.setStepDelay(fastDivide(currentVelocity));
+          
+          coasting = false;
+          accelerating = true;
+          PT_SPAWN(&state, &subState, zPriMove(0, currentCommand->getAccelDistance()));
+          
+          coasting = true;
+          accelerating = false;
+          PT_SPAWN(&state, &subState, zPriMove(currentCommand->getAccelDistance(), currentCommand->getCoastDistance()));
+          
+          coasting = false;
+          accelerating = false;
+          PT_SPAWN(&state, &subState, zPriMove(currentCommand->getCoastDistance(), numSteps));
           
         } else {
           err1 = d1x2 - Ad4;
@@ -149,10 +177,20 @@ class StepPlanner {
           err3 = d3x2 - Ad4;
           numSteps = Ad4;
           
-          currentVelocity = min(max_start_speed_units_per_second[3] * axis_steps_per_unit[3], maxVelocity);
-          currentStepDelay = fastDivide(currentVelocity);
-          prototypeStep.setStepDelay(currentStepDelay);
-          PT_SPAWN(&state, &subState, ePriMove());
+          currentVelocity = currentCommand->getVelocity();
+          prototypeStep.setStepDelay(fastDivide(currentVelocity));
+          
+          coasting = false;
+          accelerating = true;
+          PT_SPAWN(&state, &subState, ePriMove(0, currentCommand->getAccelDistance()));
+          
+          coasting = true;
+          accelerating = false;
+          PT_SPAWN(&state, &subState, ePriMove(currentCommand->getAccelDistance(), currentCommand->getCoastDistance()));
+          
+          coasting = false;
+          accelerating = false;
+          PT_SPAWN(&state, &subState, ePriMove(currentCommand->getCoastDistance(), numSteps));
         }
       
         moveCommandBuffer->remove();
@@ -161,12 +199,12 @@ class StepPlanner {
       PT_END(&state);
     }
     
-    int xPriMove() {
+    int xPriMove(unsigned long startStep, unsigned long stopStep) {
       PT_BEGIN(&subState);
       
       for(
-        numStepsLeft = 0;
-        numStepsLeft < numSteps;
+        numStepsLeft = startStep;
+        numStepsLeft < stopStep;
         numStepsLeft++
       ) {
         // wait until we have space in the step command buffer
@@ -213,12 +251,12 @@ class StepPlanner {
       PT_END(&subState);
     }
     
-    int yPriMove() {
+    int yPriMove(unsigned long startStep, unsigned long stopStep) {
       PT_BEGIN(&subState);
       
       for(
-        numStepsLeft = 0;
-        numStepsLeft < numSteps;
+        numStepsLeft = startStep;
+        numStepsLeft < stopStep;
         numStepsLeft++
       ) {
         // wait until we have space in the step command buffer
@@ -265,12 +303,12 @@ class StepPlanner {
       PT_END(&subState);
     }
     
-    int zPriMove() {
+    int zPriMove(unsigned long startStep, unsigned long stopStep) {
       PT_BEGIN(&subState);
       
       for(
-        numStepsLeft = 0;
-        numStepsLeft < numSteps;
+        numStepsLeft = startStep;
+        numStepsLeft < stopStep;
         numStepsLeft++
       ) {
         // wait until we have space in the step command buffer
@@ -317,24 +355,24 @@ class StepPlanner {
       PT_END(&subState);
     }
     
-    int ePriMove() {
+    int ePriMove(unsigned long startStep, unsigned long stopStep) {
       PT_BEGIN(&subState);
       
       for(
-        numStepsLeft = 0;
-        numStepsLeft < numSteps;
+        numStepsLeft = startStep;
+        numStepsLeft < stopStep;
         numStepsLeft++
       ) {
         // wait until we have space in the step command buffer
          PT_WAIT_UNTIL(&subState, 
           stepCommandBuffer->notFull()
         );
-           
+        
         currentStep =
           stepCommandBuffer->create();
-
+  
         currentStep->setPrototype(prototypeStep);
-
+  
         //////////
         // E
         if (err1 > 0) {
@@ -357,12 +395,12 @@ class StepPlanner {
         err3 += d3x2;
     
         currentStep->setEStep();
-
+  
         stepCommandBuffer->put();
         
         // don't need to waste time setting IO registers for DIR or ENABLE for the rest of this move
         prototypeStep.clearNewEnableDirection();
-  
+        
         calculateVelocity();
       }      
       
@@ -384,10 +422,10 @@ class StepPlanner {
      * algorithm will be skipped. 
      */
     inline void calculateVelocity() {
-      if (accelerationConstant != 0) {      
+      if (!coasting) {      
         // accumulate how long its been since the last velocity increase
         currentVelocityError +=  
-          currentStepDelay;
+          prototypeStep.getStepDelay();
           
         // if it's been longer than the period we need to increase velocity linearly...
         if (currentVelocityError > accelerationConstant) {
@@ -395,9 +433,8 @@ class StepPlanner {
             // ...then remove the length of the period to increase velocity...
             currentVelocityError -= accelerationConstant;
             
-            // ...figure out whether we should increase or decrease our velocity using
-            // a cheapo ramp function...
-            if (numStepsLeft < (numSteps >> 1)) {
+            // ...figure out whether we should increase or decrease our velocity
+            if (accelerating) {
               currentVelocity += VELOCITY_RESOLUTION;
             } else {
               currentVelocity -= VELOCITY_RESOLUTION;
@@ -407,12 +444,7 @@ class StepPlanner {
           } while (currentVelocityError > accelerationConstant);
           
           // convert the calculated velocity into a step delay using a fast division algorithm
-          currentStepDelay = fastDivide(currentVelocity);
-          
-          // clamp the max velocity
-          if (currentVelocity <= maxVelocity) {
-            prototypeStep.setStepDelay(currentStepDelay);
-          }
+          prototypeStep.setStepDelay(fastDivide(currentVelocity));
         }
       }  
     }
@@ -694,8 +726,90 @@ class StepPlanner {
         }
       } 
     } else {
-      return (DIVIDEND / divisor);
+      return Div4U2U(DIVIDEND, divisor);
     }
+  }
+
+  // 32 x 16 bit division algorithm from repetier
+  long Div4U2U(unsigned long a,unsigned int b) {
+    // r14/r15 remainder
+    // r16 counter
+    __asm__ __volatile__ (
+    "clr r14 \n\t"
+    "sub r15,r15 \n\t"
+    "tst %D0 \n\t"
+    "brne do32%= \n\t"
+    "tst %C0 \n\t"
+    "breq donot24%= \n\t"
+    "rjmp do24%= \n\t"
+    "donot24%=:" "ldi r16,17 \n\t" // 16 Bit divide
+    "d16u_1%=:" "rol %A0 \n\t"
+    "rol %B0 \n\t"
+    "dec r16 \n\t"
+    "brne	d16u_2%= \n\t"
+    "rjmp end%= \n\t"
+    "d16u_2%=:" "rol r14 \n\t"
+    "rol r15 \n\t"
+    "sub r14,%A2 \n\t"
+    "sbc r15,%B2 \n\t"
+    "brcc	d16u_3%= \n\t"
+    "add r14,%A2 \n\t"
+    "adc r15,%B2 \n\t"
+    "clc \n\t"
+    "rjmp d16u_1%= \n\t"
+    "d16u_3%=:" "sec \n\t"
+    "rjmp d16u_1%= \n\t"
+    "do32%=:" // divide full 32 bit
+    "rjmp do32B%= \n\t"
+    "do24%=:" // divide 24 bit
+  
+    "ldi r16,25 \n\t" // 24 Bit divide
+    "d24u_1%=:" "rol %A0 \n\t"
+    "rol %B0 \n\t"
+    "rol %C0 \n\t"
+    "dec r16 \n\t"
+    "brne	d24u_2%= \n\t"
+    "rjmp end%= \n\t"
+    "d24u_2%=:" "rol r14 \n\t"
+    "rol r15 \n\t"
+    "sub r14,%A2 \n\t"
+    "sbc r15,%B2 \n\t"
+    "brcc	d24u_3%= \n\t"
+    "add r14,%A2 \n\t"
+    "adc r15,%B2 \n\t"
+    "clc \n\t"
+    "rjmp d24u_1%= \n\t"
+    "d24u_3%=:" "sec \n\t"
+    "rjmp d24u_1%= \n\t"
+  
+    "do32B%=:" // divide full 32 bit
+  
+    "ldi r16,33 \n\t" // 32 Bit divide
+    "d32u_1%=:" "rol %A0 \n\t"
+    "rol %B0 \n\t"
+    "rol %C0 \n\t"
+    "rol %D0 \n\t"
+    "dec r16 \n\t"
+    "brne	d32u_2%= \n\t"
+    "rjmp end%= \n\t"
+    "d32u_2%=:" "rol r14 \n\t"
+    "rol r15 \n\t"
+    "sub r14,%A2 \n\t"
+    "sbc r15,%B2 \n\t"
+    "brcc	d32u_3%= \n\t"
+    "add r14,%A2 \n\t"
+    "adc r15,%B2 \n\t"
+    "clc \n\t"
+    "rjmp d32u_1%= \n\t"
+    "d32u_3%=:" "sec \n\t"
+    "rjmp d32u_1%= \n\t"
+  
+    "end%=:" // end
+    :"=&r"(a)
+    :"0"(a),"r"(b)
+    :"r14","r15","r16"
+    );
+   return a; 
   }
 
 };
