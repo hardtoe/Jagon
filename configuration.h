@@ -165,10 +165,10 @@ char uuid[] = "00000000-0000-0000-0000-000000000000";
 #define MAXTEMP 275
 
 #define EXTRUDER_TEMP_MIN_RESIDENCE 5
-#define EXTRUDER_TEMP_HYSTERESIS 1
+#define EXTRUDER_TEMP_HYSTERESIS 2
 
 #define HEATED_BED_TEMP_MIN_RESIDENCE 5
-#define HEADED_BED_TEMP_HYSTERESIS 1
+#define HEADED_BED_TEMP_HYSTERESIS 2
 
 // Select one of these only to define how the nozzle temp is read.
 #define HEATER_USES_THERMISTOR
@@ -179,16 +179,6 @@ char uuid[] = "00000000-0000-0000-0000-000000000000";
 #define BED_USES_THERMISTOR
 //#define BED_USES_AD595
 
-// Uncomment the following line to enable debugging. You can better control debugging below the following line
-//#define DEBUG
-#ifdef DEBUG
-  //#define DEBUG_PREPARE_MOVE //Enable this to debug prepare_move() function
-  //#define DEBUG_BRESENHAM //Enable this to debug the Bresenham algorithm
-  //#define DEBUG_RAMP_ACCELERATION //Enable this to debug all constant acceleration info
-  //#define DEBUG_MOVE_TIME //Enable this to time each move and print the result
-  //#define DEBUG_HEAT_MGMT //Enable this to debug heat management. WARNING, this will cause axes to jitter!
-  //#define DEBUG_DISABLE_CHECK_DURING_TRAVEL //Debug the namesake feature, see above in this file
-#endif
 
 #define STEP_COMMAND_Q_SIZE 64
 #define MOVE_COMMAND_Q_SIZE 16

@@ -10,13 +10,13 @@ class HeaterController : public GCodeHandler{
   private:
       struct pt state;
       struct pt subState;
-      Heater* heaterZero; 
-      Heater* heaterOne;
+      Heater<ExtruderTempSensor>* heaterZero; 
+      Heater<BedTempSensor>* heaterOne;
       
   public:
     HeaterController(
-      Heater* heaterZero, 
-      Heater* heaterOne
+      Heater<ExtruderTempSensor>* heaterZero, 
+      Heater<BedTempSensor>* heaterOne
     ) {
       this->heaterZero = heaterZero;
       this->heaterOne = heaterOne;

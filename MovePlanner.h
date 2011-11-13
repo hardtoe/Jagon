@@ -84,7 +84,8 @@ class MovePlanner : public GCodeHandler {
         (
           gcode->getType() == 'M' &&
           (
-            gcode->getOpcode() == 92
+            gcode->getOpcode() == 92 ||
+            gcode->getOpcode() == 201
           )
         );
     }
@@ -146,7 +147,13 @@ class MovePlanner : public GCodeHandler {
         ) {
             setAxisStepsPerUnit(gcode);
             calculateConstants();
-        }
+            
+        } else if (
+          gcode->getOpcode() == 201
+        ) {
+            setAxisAccel(gcode);
+            calculateConstants();
+        } 
       }
       
       PT_END(&state); 
@@ -305,6 +312,17 @@ class MovePlanner : public GCodeHandler {
       for (int axis = 0; axis < 4; axis++) {
         if (!isnan(gcode->get(axis))) {
           axis_steps_per_unit[axis] = gcode->get(axis);
+        }
+      }
+    }
+    
+    
+    ////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////
+    inline void setAxisAccel(GCode* gcode) {
+      for (int axis = 0; axis < 4; axis++) {
+        if (!isnan(gcode->get(axis))) {
+          max_acceleration_units_per_sq_second[axis] = gcode->get(axis);
         }
       }
     }

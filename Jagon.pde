@@ -34,11 +34,11 @@ StepPlanner stepPlanner(&moveCommandQueue, &stepCommandQueue);
 MovePlanner movePlanner(&moveCommandQueue, endstops);
 
 // heater controller
-TempSensor tempZero(TEMP_0_PIN);
-Heater heaterZero(HEATER_0_PIN, &tempZero, EXTRUDER_TEMP_HYSTERESIS, EXTRUDER_TEMP_MIN_RESIDENCE);
+ExtruderTempSensor tempZero(TEMP_0_PIN);
+Heater<ExtruderTempSensor> heaterZero(HEATER_0_PIN, &tempZero, EXTRUDER_TEMP_HYSTERESIS, EXTRUDER_TEMP_MIN_RESIDENCE);
 
-TempSensor tempOne(TEMP_1_PIN);
-Heater heaterOne(HEATER_1_PIN, &tempOne, HEADED_BED_TEMP_HYSTERESIS, HEATED_BED_TEMP_MIN_RESIDENCE);
+BedTempSensor tempOne(TEMP_1_PIN);
+Heater<BedTempSensor> heaterOne(HEATER_1_PIN, &tempOne, HEADED_BED_TEMP_HYSTERESIS, HEATED_BED_TEMP_MIN_RESIDENCE);
 
 HeaterController heaterController(&heaterZero, &heaterOne);
 

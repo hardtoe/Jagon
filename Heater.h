@@ -3,8 +3,7 @@
 
 #include <WProgram.h>
 
-#include "TempSensor.h"
-
+template <class TempSensor>
 class Heater {
   private:
     struct pt state;
@@ -12,7 +11,6 @@ class Heater {
     TempSensor* tempSensor;
     int targetTemp;
     boolean onTarget;  
-    boolean hasMinResidence;  
     int currentTemp;  
     int tempResidence;
     int hysteresisTempRange;
@@ -45,25 +43,30 @@ class Heater {
         currentTemp = 
           tempSensor->getTemp();
         
-        if (currentTemp < (targetTemp - hysteresisTempRange)) {
+        if (currentTemp < targetTemp) {
           // temp too low, heat up some more
           digitalWrite(heaterPin, HIGH);
         
         } else if (
-          currentTemp > (targetTemp + hysteresisTempRange) ||
+          currentTemp > targetTemp ||
           currentTemp > MAXTEMP
         ) {
           // temp too high, let it cool
           digitalWrite(heaterPin, LOW);
-          onTarget = true;
         } 
         
-        if (onTarget && !hasMinResidence) {
+        if (
+          currentTemp > (targetTemp - hysteresisTempRange) &&
+          currentTemp < (targetTemp + hysteresisTempRange)
+        ) {
             tempResidence++;
             
             if (tempResidence > minResidenceTime) {
-              hasMinResidence = true;
+              onTarget = true;
             }
+        } else {
+           tempResidence = 0; 
+           onTarget = false;
         }
         
         
@@ -80,12 +83,11 @@ class Heater {
     void setTarget(int target) {
       // if the new target is outside the hysteresis range...
       if (
-        target > targetTemp + hysteresisTempRange ||
+        target > targetTemp + hysteresisTempRange ||    
         target < targetTemp - hysteresisTempRange
       ) {
-        // ... then reset the target and min residence flags
+        // ... then reset the target flag
         onTarget = false;
-        hasMinResidence = false;
       }
       
       // set the new target
@@ -93,7 +95,7 @@ class Heater {
     }
     
     inline boolean atTargetTemp() {
-      return hasMinResidence;  
+      return onTarget;  
     }
 };
 
