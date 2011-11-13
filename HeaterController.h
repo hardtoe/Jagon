@@ -93,12 +93,18 @@ class HeaterController : public GCodeHandler{
       PT_YIELDING();
       PT_BEGIN(&subState);
 
+      // if targetTemp is a real number...
       if (!isnan(targetTemp)) {
+        // ...tell heaterZero (extruder) to warm up to targetTemp
         heaterZero->setTarget(targetTemp);
       }
 
+      // while heaterZero (extruder) has not yet reached the target temp...
       while (!heaterZero->atTargetTemp()) {
+         // ...delay for 1 second (allowing other threads to execute in the meantime)...
          PT_DELAY(&subState, 1000);
+         
+         // ...and report the current temperatures back to the host
          readCurrentTemp(); 
       }
 

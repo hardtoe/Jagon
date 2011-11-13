@@ -9,8 +9,8 @@
 #include "StepCommand.h"
 #include "Vec.h"
 
-#define VELOCITY_RESOLUTION 32
-#define MIN_STEP_DELAY 35
+#define VELOCITY_RESOLUTION 128
+#define MIN_STEP_DELAY 40
 
 class StepPlanner {
   private:
@@ -30,10 +30,10 @@ class StepPlanner {
       
     long numStepsLeft;  
       
-    unsigned int currentStepDelay;
-    unsigned int currentVelocity;
-    unsigned int minimumStepDelay; 
-    unsigned int currentVelocityError;
+    unsigned long currentStepDelay;
+    unsigned long currentVelocity;
+    unsigned long maxVelocity;
+    unsigned long currentVelocityError;
  
     unsigned int  accelerationConstant;   
 
@@ -53,7 +53,6 @@ class StepPlanner {
       this->moveCommandBuffer = moveCommandBuffer;
       this->stepCommandBuffer = stepCommandBuffer;
       
-      accelerationConstant = 8 * VELOCITY_RESOLUTION; // every 8 * VELOCITY_RESOLUTION us, increment velocity by VELOCITY_RESOLUTION
       PT_INIT(&state);
       PT_INIT(&subState);
     }
@@ -71,6 +70,9 @@ class StepPlanner {
         // get the next move command from the buffer
         currentCommand =
           moveCommandBuffer->peek();
+        
+        // setup acceleration
+        accelerationConstant = currentCommand->getAcceleration() * VELOCITY_RESOLUTION; 
         
         // setup our prototype step
         prototypeStep.clear(); 
@@ -90,10 +92,9 @@ class StepPlanner {
         if (currentCommand->getESteps() >= 0) {
           prototypeStep.setEDir();    
         }
-
-        currentVelocity = 2000; //currentCommand->getVelocity();
-        currentStepDelay = fastDivide(currentVelocity);
-        prototypeStep.setStepDelay(currentStepDelay);
+        
+        maxVelocity = currentCommand->getVelocity();
+        
         prototypeStep.enableAxis(0xF);
       
         prototypeStep.setNewEnableDirection();
@@ -114,6 +115,9 @@ class StepPlanner {
           err3 = d4x2 - Ad1;
           numSteps = Ad1;
           
+          currentVelocity = min(max_start_speed_units_per_second[0] * axis_steps_per_unit[0], maxVelocity);
+          currentStepDelay = fastDivide(currentVelocity);
+          prototypeStep.setStepDelay(currentStepDelay);
           PT_SPAWN(&state, &subState, xPriMove());
    
           
@@ -123,6 +127,9 @@ class StepPlanner {
           err3 = d4x2 - Ad2;
           numSteps = Ad2;
           
+          currentVelocity = min(max_start_speed_units_per_second[1] * axis_steps_per_unit[1], maxVelocity);
+          currentStepDelay = fastDivide(currentVelocity);
+          prototypeStep.setStepDelay(currentStepDelay);
           PT_SPAWN(&state, &subState, yPriMove());
           
         } else if(Ad3 >= Ad4) {
@@ -131,6 +138,9 @@ class StepPlanner {
           err3 = d4x2 - Ad3;
           numSteps = Ad3;
           
+          currentVelocity = min(max_start_speed_units_per_second[2] * axis_steps_per_unit[2], maxVelocity);
+          currentStepDelay = fastDivide(currentVelocity);
+          prototypeStep.setStepDelay(currentStepDelay);
           PT_SPAWN(&state, &subState, zPriMove());
           
         } else {
@@ -139,9 +149,12 @@ class StepPlanner {
           err3 = d3x2 - Ad4;
           numSteps = Ad4;
           
+          currentVelocity = min(max_start_speed_units_per_second[3] * axis_steps_per_unit[3], maxVelocity);
+          currentStepDelay = fastDivide(currentVelocity);
+          prototypeStep.setStepDelay(currentStepDelay);
           PT_SPAWN(&state, &subState, ePriMove());
         }
-
+      
         moveCommandBuffer->remove();
       }
       
@@ -313,7 +326,7 @@ class StepPlanner {
         numStepsLeft++
       ) {
         // wait until we have space in the step command buffer
-        PT_WAIT_UNTIL(&subState, 
+         PT_WAIT_UNTIL(&subState, 
           stepCommandBuffer->notFull()
         );
            
@@ -356,313 +369,334 @@ class StepPlanner {
       PT_END(&subState);
     }
     
+    /**
+     * calculate velocity for next step.  this can be thought of as a 2D Bresenham 
+     * algorithm where one dimension is the velocity in steps per second, and the
+     * other dimension is time in microseconds.
+     *
+     * runtime is slower for long periods due to looping through the velocity
+     * calculation multiple times.
+     *
+     * runtime for short periods is very fast *per period* because we may only 
+     * loop once or even not at all.
+     *
+     * runtime for constant velocity moves should be very good as the entire
+     * algorithm will be skipped. 
+     */
     inline void calculateVelocity() {
-      // check if we need to update velocity
-      currentVelocityError +=  
-        currentStepDelay;
-        
-      if (currentVelocityError > accelerationConstant) {
-        do {
-          currentVelocityError -= accelerationConstant;
+      if (accelerationConstant != 0) {      
+        // accumulate how long its been since the last velocity increase
+        currentVelocityError +=  
+          currentStepDelay;
           
-          if (numStepsLeft < (numSteps >> 1)) {
-            currentVelocity += VELOCITY_RESOLUTION;
-          } else {
-            currentVelocity -= VELOCITY_RESOLUTION;
+        // if it's been longer than the period we need to increase velocity linearly...
+        if (currentVelocityError > accelerationConstant) {
+          do {
+            // ...then remove the length of the period to increase velocity...
+            currentVelocityError -= accelerationConstant;
+            
+            // ...figure out whether we should increase or decrease our velocity using
+            // a cheapo ramp function...
+            if (numStepsLeft < (numSteps >> 1)) {
+              currentVelocity += VELOCITY_RESOLUTION;
+            } else {
+              currentVelocity -= VELOCITY_RESOLUTION;
+            }
+            
+            // ...and keep looping until we have accumulated the correct velocity
+          } while (currentVelocityError > accelerationConstant);
+          
+          // convert the calculated velocity into a step delay using a fast division algorithm
+          currentStepDelay = fastDivide(currentVelocity);
+          
+          // clamp the max velocity
+          if (currentVelocity <= maxVelocity) {
+            prototypeStep.setStepDelay(currentStepDelay);
           }
-        } while (currentVelocityError > accelerationConstant);
-         
-        currentStepDelay = fastDivide(currentVelocity);
-        prototypeStep.setStepDelay(currentStepDelay);
+        }
       }  
     }
 
 #define DIVIDEND (F_CPU/16)
 
-inline unsigned int fastDivide(unsigned int divisor) {
-  if (divisor >= (DIVIDEND/(MIN_STEP_DELAY+5))) {
-    if (divisor >= DIVIDEND/MIN_STEP_DELAY) {
-      return MIN_STEP_DELAY; 
-      
-    } else if (divisor >= DIVIDEND/(MIN_STEP_DELAY+1)) {
-      return (MIN_STEP_DELAY+1); 
-      
-    } else if (divisor >= DIVIDEND/(MIN_STEP_DELAY+2)) {
-      return (MIN_STEP_DELAY+2); 
-      
-    } else if (divisor >= DIVIDEND/(MIN_STEP_DELAY+3)) {
-      return (MIN_STEP_DELAY+3); 
-      
-    } else if (divisor >= DIVIDEND/(MIN_STEP_DELAY+4)) {
-      return (MIN_STEP_DELAY+4); 
-      
+  inline unsigned int fastDivide(unsigned int divisor) {
+    if (divisor >= (DIVIDEND/(MIN_STEP_DELAY+5))) {
+      if (divisor >= DIVIDEND/MIN_STEP_DELAY) {
+        return MIN_STEP_DELAY; 
+        
+      } else if (divisor >= DIVIDEND/(MIN_STEP_DELAY+1)) {
+        return (MIN_STEP_DELAY+1); 
+        
+      } else if (divisor >= DIVIDEND/(MIN_STEP_DELAY+2)) {
+        return (MIN_STEP_DELAY+2); 
+        
+      } else if (divisor >= DIVIDEND/(MIN_STEP_DELAY+3)) {
+        return (MIN_STEP_DELAY+3); 
+        
+      } else if (divisor >= DIVIDEND/(MIN_STEP_DELAY+4)) {
+        return (MIN_STEP_DELAY+4); 
+        
+      } else {
+        return (MIN_STEP_DELAY+5);
+      }
+    } else if (divisor > 11236) { 
+      if (divisor > 17544) { 
+        if (divisor > 24390) {          
+          if (divisor > 30303) {
+            if (divisor > 34483) {
+              if (divisor > 37037) {          
+                if (divisor > 38462) {
+                  return 26;
+                } else {
+                  return 27;
+                }
+              } else {      
+                if (divisor > 35714) {
+                  return 28;
+                } else {
+                  return 29;
+                }
+              }
+            } else {
+              if (divisor > 32258) {          
+                if (divisor > 33333) {
+                  return 30;
+                } else {
+                  return 31;
+                }
+              } else {      
+                if (divisor > 31250) {
+                  return 32;
+                } else {
+                  return 33;
+                }
+              }
+            }            
+          } else {
+            if (divisor > 27027) {
+              if (divisor > 28571) {          
+                if (divisor > 29412) {
+                  return 34;
+                } else {
+                  return 35;
+                }
+              } else {      
+                if (divisor > 27778) {
+                  return 36;
+                } else {
+                  return 37;
+                }
+              }
+            } else {
+              if (divisor > 25641) {          
+                if (divisor >26316 ) {
+                  return 38;
+                } else {
+                  return 39;
+                }
+              } else {      
+                if (divisor > 25000) {
+                  return 40;
+                } else {
+                  return 41;
+                }
+              }
+            }
+          }
+        } else {      
+          if (divisor > 20408) {
+            if (divisor > 22222) {
+              if (divisor > 23256) {          
+                if (divisor > 23810) {
+                  return 42;
+                } else {
+                  return 43;
+                }
+              } else {      
+                if (divisor > 22727) {
+                  return 44;
+                } else {
+                  return 45;
+                }
+              }
+            } else {
+              if (divisor > 21277) {          
+                if (divisor >21739 ) {
+                  return 46;
+                } else {
+                  return 47;
+                }
+              } else {      
+                if (divisor > 20833) {
+                  return 48;
+                } else {
+                  return 49;
+                }
+              }
+            }  
+          } else {
+            if (divisor > 18868) {
+              if (divisor > 19608) {          
+                if (divisor > 20000) {
+                  return 50;
+                } else {
+                  return 51;
+                }
+              } else {      
+                if (divisor > 19231) {
+                  return 52;
+                } else {
+                  return 53;
+                }
+              }
+            } else {
+              if (divisor > 18182) {          
+                if (divisor >18519 ) {
+                  return 54;
+                } else {
+                  return 55;
+                }
+              } else {      
+                if (divisor > 17857) {
+                  return 56;
+                } else {
+                  return 57;
+                }
+              }
+            }  
+          }
+        }
+      } else {
+        if (divisor > 13699) {          
+          if (divisor > 15385) {
+            if (divisor > 16393) {
+              if (divisor > 16949) {          
+                if (divisor > 17241) {
+                  return 58;
+                } else {
+                  return 59;
+                }
+              } else {      
+                if (divisor > 16667) {
+                  return 60;
+                } else {
+                  return 61;
+                }
+              }
+            } else {
+              if (divisor > 15873) {          
+                if (divisor >16129 ) {
+                  return 62;
+                } else {
+                  return 63;
+                }
+              } else {      
+                if (divisor > 15625) {
+                  return 64;
+                } else {
+                  return 65;
+                }
+              }
+            } 
+          } else {
+            if (divisor > 14493) {
+              if (divisor > 14925) {          
+                if (divisor > 15152) {
+                  return 66;
+                } else {
+                  return 67;
+                }
+              } else {      
+                if (divisor > 14706) {
+                  return 68;
+                } else {
+                  return 69;
+                }
+              }
+            } else {
+              if (divisor > 14085) {          
+                if (divisor > 14286) {
+                  return 70;
+                } else {
+                  return 71;
+                }
+              } else {      
+                if (divisor >13889 ) {
+                  return 72;
+                } else {
+                  return 73;
+                }
+              }
+            } 
+          }
+        } else {      
+          if (divisor > 12346) {
+            if (divisor > 12987) {
+              if (divisor > 13333) {          
+                if (divisor > 13514) {
+                  return 74;
+                } else {
+                  return 75;
+                }
+              } else {      
+                if (divisor > 13158) {
+                  return 76;
+                } else {
+                  return 77;
+                }
+              }
+            } else {
+              if (divisor > 12658) {          
+                if (divisor > 12821) {
+                  return 78;
+                } else {
+                  return 79;
+                }
+              } else {      
+                if (divisor >12500 ) {
+                  return 80;
+                } else {
+                  return 81;
+                }
+              }
+            }
+          } else {
+            if (divisor > 11765) {
+              if (divisor > 12048) {          
+                if (divisor > 12195) {
+                  return 82;
+                } else {
+                  return 83;
+                }
+              } else {      
+                if (divisor > 11905) {
+                  return 84;
+                } else {
+                  return 85;
+                }
+              }
+            } else {
+              if (divisor > 11494) {          
+                if (divisor > 11628) {
+                  return 86;
+                } else {
+                  return 87;
+                }
+              } else {      
+                if (divisor >11364 ) {
+                  return 88;
+                } else {
+                  return 89;
+                }
+              }
+            } 
+          }
+        }
+      } 
     } else {
-      return (MIN_STEP_DELAY+5);
+      return (DIVIDEND / divisor);
     }
-  } else if (divisor > 11236) { 
-    if (divisor > 17544) { 
-      if (divisor > 24390) {          
-        if (divisor > 30303) {
-          if (divisor > 34483) {
-            if (divisor > 37037) {          
-              if (divisor > 38462) {
-                return 26;
-              } else {
-                return 27;
-              }
-            } else {      
-              if (divisor > 35714) {
-                return 28;
-              } else {
-                return 29;
-              }
-            }
-          } else {
-            if (divisor > 32258) {          
-              if (divisor > 33333) {
-                return 30;
-              } else {
-                return 31;
-              }
-            } else {      
-              if (divisor > 31250) {
-                return 32;
-              } else {
-                return 33;
-              }
-            }
-          }            
-        } else {
-          if (divisor > 27027) {
-            if (divisor > 28571) {          
-              if (divisor > 29412) {
-                return 34;
-              } else {
-                return 35;
-              }
-            } else {      
-              if (divisor > 27778) {
-                return 36;
-              } else {
-                return 37;
-              }
-            }
-          } else {
-            if (divisor > 25641) {          
-              if (divisor >26316 ) {
-                return 38;
-              } else {
-                return 39;
-              }
-            } else {      
-              if (divisor > 25000) {
-                return 40;
-              } else {
-                return 41;
-              }
-            }
-          }
-        }
-      } else {      
-        if (divisor > 20408) {
-          if (divisor > 22222) {
-            if (divisor > 23256) {          
-              if (divisor > 23810) {
-                return 42;
-              } else {
-                return 43;
-              }
-            } else {      
-              if (divisor > 22727) {
-                return 44;
-              } else {
-                return 45;
-              }
-            }
-          } else {
-            if (divisor > 21277) {          
-              if (divisor >21739 ) {
-                return 46;
-              } else {
-                return 47;
-              }
-            } else {      
-              if (divisor > 20833) {
-                return 48;
-              } else {
-                return 49;
-              }
-            }
-          }  
-        } else {
-          if (divisor > 18868) {
-            if (divisor > 19608) {          
-              if (divisor > 20000) {
-                return 50;
-              } else {
-                return 51;
-              }
-            } else {      
-              if (divisor > 19231) {
-                return 52;
-              } else {
-                return 53;
-              }
-            }
-          } else {
-            if (divisor > 18182) {          
-              if (divisor >18519 ) {
-                return 54;
-              } else {
-                return 55;
-              }
-            } else {      
-              if (divisor > 17857) {
-                return 56;
-              } else {
-                return 57;
-              }
-            }
-          }  
-        }
-      }
-    } else {
-      if (divisor > 13699) {          
-        if (divisor > 15385) {
-          if (divisor > 16393) {
-            if (divisor > 16949) {          
-              if (divisor > 17241) {
-                return 58;
-              } else {
-                return 59;
-              }
-            } else {      
-              if (divisor > 16667) {
-                return 60;
-              } else {
-                return 61;
-              }
-            }
-          } else {
-            if (divisor > 15873) {          
-              if (divisor >16129 ) {
-                return 62;
-              } else {
-                return 63;
-              }
-            } else {      
-              if (divisor > 15625) {
-                return 64;
-              } else {
-                return 65;
-              }
-            }
-          } 
-        } else {
-          if (divisor > 14493) {
-            if (divisor > 14925) {          
-              if (divisor > 15152) {
-                return 66;
-              } else {
-                return 67;
-              }
-            } else {      
-              if (divisor > 14706) {
-                return 68;
-              } else {
-                return 69;
-              }
-            }
-          } else {
-            if (divisor > 14085) {          
-              if (divisor > 14286) {
-                return 70;
-              } else {
-                return 71;
-              }
-            } else {      
-              if (divisor >13889 ) {
-                return 72;
-              } else {
-                return 73;
-              }
-            }
-          } 
-        }
-      } else {      
-        if (divisor > 12346) {
-          if (divisor > 12987) {
-            if (divisor > 13333) {          
-              if (divisor > 13514) {
-                return 74;
-              } else {
-                return 75;
-              }
-            } else {      
-              if (divisor > 13158) {
-                return 76;
-              } else {
-                return 77;
-              }
-            }
-          } else {
-            if (divisor > 12658) {          
-              if (divisor > 12821) {
-                return 78;
-              } else {
-                return 79;
-              }
-            } else {      
-              if (divisor >12500 ) {
-                return 80;
-              } else {
-                return 81;
-              }
-            }
-          }
-        } else {
-          if (divisor > 11765) {
-            if (divisor > 12048) {          
-              if (divisor > 12195) {
-                return 82;
-              } else {
-                return 83;
-              }
-            } else {      
-              if (divisor > 11905) {
-                return 84;
-              } else {
-                return 85;
-              }
-            }
-          } else {
-            if (divisor > 11494) {          
-              if (divisor > 11628) {
-                return 86;
-              } else {
-                return 87;
-              }
-            } else {      
-              if (divisor >11364 ) {
-                return 88;
-              } else {
-                return 89;
-              }
-            }
-          } 
-        }
-      }
-    } 
-  } else {
-    return ((1000000) / divisor);
   }
-}
-
-
-
-
-
-
 
 };
 

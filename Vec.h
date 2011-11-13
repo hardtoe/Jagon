@@ -2,6 +2,7 @@
 #define VEC_H
 
 #include <WProgram.h>
+#include <math.h>
 
 template<class Object, int size>
 class Vec {
@@ -9,6 +10,19 @@ class Vec {
     Object values[size];
  
   public: 
+    inline Object magnitude() {
+      Object resultSquared = 0;
+      
+      for (int i = 0; i < size; i++) {
+        if (!isnan(values[i])) {
+          resultSquared +=
+            sq(values[i]);
+        }
+      }
+      
+      return sqrt(resultSquared);
+    }
+  
     inline void operator=(Vec<Object,size> rhs) {
       for (int i = 0; i < size; i++) {
         values[i] = rhs.get(i);
@@ -54,6 +68,16 @@ class Vec {
      
       return value; 
     }
+    
+    inline Vec<float,size> asFloat() {
+      Vec<float,size> value;
+     
+      for (int i = 0; i < size; i++) {
+        value.set(i, values[i]);
+      }
+     
+      return value; 
+    }
   
     inline Vec<Object,size> operator*(Object rhs) {
       Vec<Object,size> result;
@@ -65,7 +89,27 @@ class Vec {
       return result;
     }
     
-    inline Vec<Object,size> operator/(Object rhs) {
+    inline Vec<Object,size> operator/(long rhs) {
+      Vec<Object,size> result;
+      
+      for (int i = 0; i < size; i++) {
+        result.set(i, values[i] / rhs); 
+      }
+      
+      return result;
+    }
+    
+    inline Vec<Object,size> operator/(float rhs) {
+      Vec<Object,size> result;
+      
+      for (int i = 0; i < size; i++) {
+        result.set(i, values[i] / rhs); 
+      }
+      
+      return result;
+    }
+    
+    inline Vec<Object,size> operator/(int rhs) {
       Vec<Object,size> result;
       
       for (int i = 0; i < size; i++) {
@@ -125,7 +169,27 @@ class Vec {
       return result;
     }
     
-    inline Vec<Object,size> operator/(Vec<Object,size> rhs) {
+    inline Vec<Object,size> operator/(Vec<int,size> rhs) {
+      Vec<Object,size> result;
+      
+      for (int i = 0; i < size; i++) {
+        result.set(i, values[i] / rhs.get(i)); 
+      }
+      
+      return result;
+    }
+    
+    inline Vec<Object,size> operator/(Vec<float,size> rhs) {
+      Vec<Object,size> result;
+      
+      for (int i = 0; i < size; i++) {
+        result.set(i, values[i] / rhs.get(i)); 
+      }
+      
+      return result;
+    }
+    
+    inline Vec<Object,size> operator/(Vec<long,size> rhs) {
       Vec<Object,size> result;
       
       for (int i = 0; i < size; i++) {
@@ -174,5 +238,15 @@ class Vec {
       return values[index];
     }   
 };
+
+    inline Vec<long,4> operator/(long lhs, Vec<long,4> rhs) {
+      Vec<long,4> result;
+      
+      for (int i = 0; i < 4; i++) {
+        result.set(i, lhs / rhs.get(i)); 
+      }
+      
+      return result;
+    }
 
 #endif // VEC_H

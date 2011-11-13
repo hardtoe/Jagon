@@ -8,6 +8,7 @@
 class MoveCommand : public Vec<long,4> {
   private:
     unsigned int velocity;
+    int acceleration;
  
   public: 
     void setSteps(Vec<long,4> steps) {
@@ -36,6 +37,10 @@ class MoveCommand : public Vec<long,4> {
       this->velocity = velocity; 
     }
     
+    void setAcceleration(int acceleration) {
+      this->acceleration = acceleration; 
+    }
+    
     long getXSteps() {
       return get(0);
     }
@@ -52,8 +57,18 @@ class MoveCommand : public Vec<long,4> {
       return get(3);
     }
     
-    float getVelocity() {
+    /**
+     * initial velocity in steps/second
+     */
+    unsigned int getVelocity() {
       return this->velocity; 
+    }
+    
+    /**
+     * acceleration in steps/second/second
+     */
+    unsigned int getAcceleration() {
+      return this->acceleration; 
     }
 };
 

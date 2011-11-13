@@ -21,12 +21,17 @@ class MovePlanner : public GCodeHandler {
     Vec<long,4> currentLocation;
     Vec<float,4> stepsPerUnit;
     Vec<long,4> maxFeedRate;
+    Vec<long,4> maxAcceleration;
+    Vec<long,4> maxAccelerationSteps;
     Vec<long,4> maxFeedRateSteps;
     StepperDriver* endstops;
     boolean relativeMode;
+    boolean homingRelativeMode;
     
     byte longAxis;
     long longAxisDelta;
+    
+    float currentFeedrate;
   
   public:
     MovePlanner(
@@ -41,12 +46,21 @@ class MovePlanner : public GCodeHandler {
       this->moveCommandQueue = moveCommandQueue;
       this->endstops = endstops;
       
+      calculateConstants();
+      
+      currentFeedrate = 20;
+    }
+    
+    void calculateConstants() {
       currentLocation = (long[]) {0, 0, 0, 0};
       stepsPerUnit = axis_steps_per_unit;
       relativeMode = false;
       
       maxFeedRate = max_feedrate;
-      maxFeedRateSteps = maxFeedRate * stepsPerUnit;
+      maxFeedRateSteps = (maxFeedRate * stepsPerUnit) / 60;
+      
+      maxAcceleration = max_acceleration_units_per_sq_second;
+      maxAccelerationSteps = (F_CPU/16) / (maxAcceleration * stepsPerUnit);
     }
     
     ////////////////////////////////////////////////////////////////////////////////
@@ -55,15 +69,23 @@ class MovePlanner : public GCodeHandler {
       ASSERT(gcode != NULL);
       
       return 
-        gcode->getType() == 'G' &&
         (
-          gcode->getOpcode() == 0 ||
-          gcode->getOpcode() == 1 ||
-          gcode->getOpcode() == 4 ||
-          gcode->getOpcode() == 28 ||
-          gcode->getOpcode() == 90 ||
-          gcode->getOpcode() == 91 ||
-          gcode->getOpcode() == 92
+          gcode->getType() == 'G' &&
+          (
+            gcode->getOpcode() == 0 ||
+            gcode->getOpcode() == 1 ||
+            gcode->getOpcode() == 4 ||
+            gcode->getOpcode() == 28 ||
+            gcode->getOpcode() == 90 ||
+            gcode->getOpcode() == 91 ||
+            gcode->getOpcode() == 92
+          )
+        ) ||
+        (
+          gcode->getType() == 'M' &&
+          (
+            gcode->getOpcode() == 92
+          )
         );
     }
     
@@ -86,36 +108,45 @@ class MovePlanner : public GCodeHandler {
       ASSERT(canHandle(gcode));
       ASSERT(moveCommandQueue->notFull());
       
-      if (
-        gcode->getOpcode() == 0 ||
-        gcode->getOpcode() == 1
-      ) {
-          coordinatedMove(gcode);                 
-
-      } else if (
-        gcode->getOpcode() == 4
-      ) {
-          PT_SPAWN(&state, &subState, dwell(gcode));                       
-     
-      } else if (
-        gcode->getOpcode() == 28
-      ) {
-          PT_SPAWN(&state, &subState, homeAxis(gcode));                  
-     
-      } else if (
-        gcode->getOpcode() == 90
-      ) {
-          relativeMode = false;                          
-     
-      } else if (
-        gcode->getOpcode() == 91
-      ) {
-          relativeMode = true;          
-     
-      } else if (
-        gcode->getOpcode() == 92
-      ) {
-          setCurrentPosition(gcode);
+      if (gcode->getType() == 'G') {
+        if (
+          gcode->getOpcode() == 0 ||
+          gcode->getOpcode() == 1
+        ) {
+            coordinatedMove(gcode);                 
+  
+        } else if (
+          gcode->getOpcode() == 4
+        ) {
+            PT_SPAWN(&state, &subState, dwell(gcode));                       
+       
+        } else if (
+          gcode->getOpcode() == 28
+        ) {
+            PT_SPAWN(&state, &subState, homeAxis(gcode));                  
+       
+        } else if (
+          gcode->getOpcode() == 90
+        ) {
+            relativeMode = false;                          
+       
+        } else if (
+          gcode->getOpcode() == 91
+        ) {
+            relativeMode = true;          
+       
+        } else if (
+          gcode->getOpcode() == 92
+        ) {
+            setCurrentPosition(gcode);
+        }
+      } else if (gcode->getType() == 'M') {
+        if (
+          gcode->getOpcode() == 92
+        ) {
+            setAxisStepsPerUnit(gcode);
+            calculateConstants();
+        }
       }
       
       PT_END(&state); 
@@ -132,7 +163,7 @@ class MovePlanner : public GCodeHandler {
         if (isnan(gcode->get(axis))) {
           moveCommand->set(axis, 0);
         } else {
-          if (relativeMode) {
+          if (relativeMode || homingRelativeMode) {
             moveCommand->set(axis, (long) (gcode->get(axis) * stepsPerUnit.get(axis)));
             currentLocation.set(axis, (long) (gcode->get(axis) * stepsPerUnit.get(axis)) + currentLocation.get(axis));
           } else {
@@ -142,9 +173,29 @@ class MovePlanner : public GCodeHandler {
         }
       }
       
-      longAxis = ((*moveCommand) / maxFeedRateSteps).maxReduceIndex();
+      if (!isnan(gcode->getF())) {
+        currentFeedrate = gcode->getF()/60;
+      }
       
-      moveCommand->setVelocity(maxFeedRateSteps.get(longAxis));
+      longAxis = moveCommand->absValue().maxReduceIndex();
+      
+      Vec<float,4> moveDelta = (moveCommand->asFloat() / stepsPerUnit.asFloat());
+      float moveDistance_mm = moveDelta.magnitude();
+      float desiredMoveTime_s = moveDistance_mm / (float) currentFeedrate;
+      Vec<long,4> desiredStepsPerSecond = ((*moveCommand) / desiredMoveTime_s).absValue();
+      
+      /*
+      Serial.println("debug");
+      Serial.println(desiredStepsPerSecond.get(longAxis));
+      Serial.println(maxFeedRateSteps.get(longAxis));
+      Serial.println(maxAccelerationSteps.get(longAxis));
+      Serial.println(moveDelta.magnitude());
+      Serial.println(desiredMoveTime_s);
+      */
+      
+      //moveCommand->setVelocity(maxFeedRateSteps.get(longAxis));
+      moveCommand->setVelocity(min(desiredStepsPerSecond.get(longAxis), maxFeedRateSteps.get(longAxis)));
+      moveCommand->setAcceleration(maxAccelerationSteps.get(longAxis));  
         
       moveCommandQueue->put();
     }
@@ -155,6 +206,8 @@ class MovePlanner : public GCodeHandler {
     inline int homeAxis(GCode* gcode) {
       PT_YIELDING();
       PT_BEGIN(&subState);    
+      
+      homingRelativeMode = true;
       
       if (
         (
@@ -167,14 +220,14 @@ class MovePlanner : public GCodeHandler {
         // home z-axis
         while (!endstops->zAtMin()) {
           PT_WAIT_UNTIL(&subState, moveCommandQueue->isEmpty());    
-          coordinatedMove(&(makeGCode(NAN, NAN, -.1, NAN, 60)));
+          coordinatedMove(&(makeGCode(NAN, NAN, -.1, NAN, homing_feedrate[2])));
           setCurrentPosition(&(makeGCode(NAN, NAN, 0, NAN, 0)));
           PT_YIELD(&subState);
         }
         
         // move z up a little bit
         PT_WAIT_UNTIL(&subState, moveCommandQueue->notFull()); 
-        coordinatedMove(&(makeGCode(NAN, NAN, 5, NAN, 60)));
+        coordinatedMove(&(makeGCode(NAN, NAN, 1, NAN, homing_feedrate[2])));
       }
       
       // home x-axis
@@ -188,7 +241,7 @@ class MovePlanner : public GCodeHandler {
       ) {
         while (!endstops->xAtMin()) {
           PT_WAIT_UNTIL(&subState, moveCommandQueue->isEmpty());    
-          coordinatedMove(&(makeGCode(-1, NAN, NAN, NAN, 60)));
+          coordinatedMove(&(makeGCode(-1, NAN, NAN, NAN, homing_feedrate[0])));
           setCurrentPosition(&(makeGCode(0, NAN, NAN, NAN, 0)));
           PT_YIELD(&subState);
         }
@@ -205,11 +258,13 @@ class MovePlanner : public GCodeHandler {
       ) {
         while (!endstops->yAtMin()) {
           PT_WAIT_UNTIL(&subState, moveCommandQueue->isEmpty());    
-          coordinatedMove(&(makeGCode(NAN, -1, NAN, NAN, 60)));
+          coordinatedMove(&(makeGCode(NAN, -1, NAN, NAN, homing_feedrate[1])));
           setCurrentPosition(&(makeGCode(NAN, 0, NAN, NAN, 0)));
           PT_YIELD(&subState);
         }
       }
+      
+      homingRelativeMode = false;
       
       PT_END(&subState); 
     }
@@ -239,6 +294,17 @@ class MovePlanner : public GCodeHandler {
       for (int axis = 0; axis < 4; axis++) {
         if (!isnan(gcode->get(axis))) {
           currentLocation.set(axis, gcode->get(axis) * stepsPerUnit.get(axis));
+        }
+      }
+    }
+    
+    
+    ////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////
+    inline void setAxisStepsPerUnit(GCode* gcode) {
+      for (int axis = 0; axis < 4; axis++) {
+        if (!isnan(gcode->get(axis))) {
+          axis_steps_per_unit[axis] = gcode->get(axis);
         }
       }
     }

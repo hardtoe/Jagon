@@ -90,8 +90,8 @@ const int Z_MAX_LENGTH = 100;
 
 //// MOVEMENT SETTINGS
 const int NUM_AXIS = 4; // The axis order in all axis related arrays is X, Y, Z, E
-long max_feedrate[] = {25, 25, 10, 200};
-long homing_feedrate[] = {25,25,2};
+long max_feedrate[] = {12000, 12000, 30, 1500};
+long homing_feedrate[] = {25 * 60, 25 * 60, 2 * 60};
 bool axis_relative_modes[] = {false, false, false, false};
 
 // Min step delay in microseconds. If you are experiencing missing steps, try to raise the delay microseconds, but be aware this
@@ -109,8 +109,8 @@ bool axis_relative_modes[] = {false, false, false, false};
 #ifdef RAMP_ACCELERATION
 // X, Y, Z, E maximum start speed for accelerated moves. E default values are good for skeinforge 40+, for older versions raise them a lot.
 float max_start_speed_units_per_second[] = {25.0,25.0,0.2,10.0};
-long max_acceleration_units_per_sq_second[] = {1000,1000,50,10000}; // X, Y, Z and E max acceleration in mm/s^2 for printing moves or retracts
-long max_travel_acceleration_units_per_sq_second[] = {1000,1000,50,500}; // X, Y, Z max acceleration in mm/s^2 for travel moves
+long max_acceleration_units_per_sq_second[] = {1000,1000,25,10000}; // X, Y, Z and E max acceleration in mm/s^2 for printing moves or retracts
+long max_travel_acceleration_units_per_sq_second[] = {1000,1000,25,500}; // X, Y, Z max acceleration in mm/s^2 for travel moves
 #endif
 
 // Machine UUID
@@ -163,6 +163,12 @@ char uuid[] = "00000000-0000-0000-0000-000000000000";
 // This feature exists to protect your hotend from overheating accidentally, but *NOT* from thermistor short/failure!
 // You should use MINTEMP for thermistor short/failure protection.
 #define MAXTEMP 275
+
+#define EXTRUDER_TEMP_MIN_RESIDENCE 5
+#define EXTRUDER_TEMP_HYSTERESIS 1
+
+#define HEATED_BED_TEMP_MIN_RESIDENCE 5
+#define HEADED_BED_TEMP_HYSTERESIS 1
 
 // Select one of these only to define how the nozzle temp is read.
 #define HEATER_USES_THERMISTOR

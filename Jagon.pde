@@ -35,10 +35,10 @@ MovePlanner movePlanner(&moveCommandQueue, endstops);
 
 // heater controller
 TempSensor tempZero(TEMP_0_PIN);
-Heater heaterZero(HEATER_0_PIN, &tempZero);
+Heater heaterZero(HEATER_0_PIN, &tempZero, EXTRUDER_TEMP_HYSTERESIS, EXTRUDER_TEMP_MIN_RESIDENCE);
 
 TempSensor tempOne(TEMP_1_PIN);
-Heater heaterOne(HEATER_1_PIN, &tempOne);
+Heater heaterOne(HEATER_1_PIN, &tempOne, HEADED_BED_TEMP_HYSTERESIS, HEATED_BED_TEMP_MIN_RESIDENCE);
 
 HeaterController heaterController(&heaterZero, &heaterOne);
 
@@ -78,8 +78,14 @@ void setup() {
 
 void loop() {
   hostInterface.tick();
+  stepPlanner.tick();
+  
   gCodeDecoder.tick();
   stepPlanner.tick();
+  
   heaterZero.tick();
-  heaterOne.tick();              
+  stepPlanner.tick();
+
+  heaterOne.tick();   
+  stepPlanner.tick();           
 }
