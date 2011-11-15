@@ -157,15 +157,15 @@ class StepperDriver {
         zAxis.step(false);
         eAxis.step(false);
         
-        skippedLast = false;
+        //skippedLast = false;
         
-      } else {
+      } /*else {
         if (!skippedLast) {
           Serial.println((unsigned int) skips++); 
         }
         
         skippedLast = true;
-      }
+      }*/
     }
 };
 

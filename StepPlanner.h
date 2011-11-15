@@ -28,7 +28,7 @@ class StepPlanner {
     
     byte longAxis;
       
-    long numStepsLeft;  
+    long stepNumber;  
       
     unsigned long currentVelocity;
     unsigned long currentVelocityError;
@@ -191,6 +191,7 @@ class StepPlanner {
           coasting = false;
           accelerating = false;
           PT_SPAWN(&state, &subState, ePriMove(currentCommand->getCoastDistance(), numSteps));
+          
         }
       
         moveCommandBuffer->remove();
@@ -203,9 +204,9 @@ class StepPlanner {
       PT_BEGIN(&subState);
       
       for(
-        numStepsLeft = startStep;
-        numStepsLeft < stopStep;
-        numStepsLeft++
+        stepNumber = startStep;
+        stepNumber < stopStep;
+        stepNumber++
       ) {
         // wait until we have space in the step command buffer
         PT_WAIT_UNTIL(&subState, 
@@ -255,9 +256,9 @@ class StepPlanner {
       PT_BEGIN(&subState);
       
       for(
-        numStepsLeft = startStep;
-        numStepsLeft < stopStep;
-        numStepsLeft++
+        stepNumber = startStep;
+        stepNumber < stopStep;
+        stepNumber++
       ) {
         // wait until we have space in the step command buffer
         PT_WAIT_UNTIL(&subState, 
@@ -307,9 +308,9 @@ class StepPlanner {
       PT_BEGIN(&subState);
       
       for(
-        numStepsLeft = startStep;
-        numStepsLeft < stopStep;
-        numStepsLeft++
+        stepNumber = startStep;
+        stepNumber < stopStep;
+        stepNumber++
       ) {
         // wait until we have space in the step command buffer
         PT_WAIT_UNTIL(&subState, 
@@ -359,9 +360,9 @@ class StepPlanner {
       PT_BEGIN(&subState);
       
       for(
-        numStepsLeft = startStep;
-        numStepsLeft < stopStep;
-        numStepsLeft++
+        stepNumber = startStep;
+        stepNumber < stopStep;
+        stepNumber++
       ) {
         // wait until we have space in the step command buffer
          PT_WAIT_UNTIL(&subState, 
@@ -726,7 +727,7 @@ class StepPlanner {
         }
       } 
     } else {
-      return Div4U2U(DIVIDEND, divisor);
+      return DIVIDEND / divisor;
     }
   }
 

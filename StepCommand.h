@@ -36,11 +36,11 @@ class StepCommand {
        stepCommand &= ~0x1000; 
     }
 
-    inline void setStepDelay(int stepDelay) {
+    inline void setStepDelay(unsigned int stepDelay) {
       this->stepDelay = stepDelay;
     }
     
-    inline int getStepDelay() {
+    inline unsigned int getStepDelay() {
       return this->stepDelay;
     }
   

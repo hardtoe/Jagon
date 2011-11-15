@@ -109,6 +109,9 @@ class MovePlanner : public GCodeHandler {
       ASSERT(canHandle(gcode));
       ASSERT(moveCommandQueue->notFull());
       
+      
+      DUMP("moveCommandQueue->size(): ", moveCommandQueue->size());
+      
       if (gcode->getType() == 'G') {
         if (
           gcode->getOpcode() == 0 ||
@@ -191,9 +194,7 @@ class MovePlanner : public GCodeHandler {
       float desiredMoveTime_s = moveDistance_mm / (float) currentFeedrate;
       Vec<long,4> desiredStepsPerSecond = ((*moveCommand) / desiredMoveTime_s).absValue();
       
-      //moveCommand->setVelocity(maxFeedRateSteps.get(longAxis));
-      //moveCommand->setVelocity();
-      moveCommand->setAcceleration(maxAccelerationSteps.get(longAxis));  
+      moveCommand->setAcceleration(max(1, maxAccelerationSteps.get(longAxis)));  
       
       
       unsigned long numSteps = moveCommand->absValue().maxReduce();  
@@ -211,12 +212,12 @@ class MovePlanner : public GCodeHandler {
         initialVelocity = maxStartVelocity;
         
         unsigned long numStepsToAccelerate = 
-          ((finalVelocity * finalVelocity) - (initialVelocity * initialVelocity)) /
-          (2 * moveCommand->getAcceleration());
+          (((finalVelocity * finalVelocity) - (initialVelocity * initialVelocity)) * 7) / 
+          (((unsigned long) 2 * ((unsigned long) maxAcceleration.get(longAxis) * (unsigned long) stepsPerUnit.get(longAxis))) * 5);
                   
         moveCommand->setVelocity(initialVelocity);   
           
-        if (numStepsToAccelerate >= numSteps) {
+        if (numStepsToAccelerate >= (numSteps/2)) {
           // ramp looks like a pyramid, no coasting phase
           moveCommand->setAccelDistance(numSteps/2);
           moveCommand->setCoastDistance(numSteps/2);
@@ -225,12 +226,12 @@ class MovePlanner : public GCodeHandler {
         } else {
           // ramp looks like a trapezoid    
           moveCommand->setAccelDistance(numStepsToAccelerate);
-          moveCommand->setCoastDistance(numSteps - (2 * numStepsToAccelerate));
+          moveCommand->setCoastDistance(numSteps - numStepsToAccelerate);
           moveCommand->setDecelDistance(numSteps);
         }  
         
       } else {
-        // constant velocity, no acceleration need
+        // constant velocity, no acceleration needed
         moveCommand->setVelocity(finalVelocity); 
         moveCommand->setAccelDistance(0);
         moveCommand->setCoastDistance(numSteps);

@@ -60,11 +60,11 @@ class GCodeDecoder {
         
         // query all the handlers to see who can process this gcode
         for (currentHandler = 0; currentHandler < numHandlers; currentHandler++) {
-            if (gCodeHandlers[currentHandler]->canHandle(gCode)) {
+            if (gCodeHandlers[currentHandler]->canHandle(gCode)) {             
                hasOwner = true;
                
                if (gCodeHandlers[currentHandler]->ready(gCode)) {
-                 PT_WAIT_THREAD(&state, gCodeHandlers[currentHandler]->process(gCode));              
+                 PT_WAIT_THREAD(&state, gCodeHandlers[currentHandler]->process(gCode));                      
                  gCodeBuffer->remove();
                  break;
                }
@@ -78,8 +78,8 @@ class GCodeDecoder {
           Serial.println(gCode->getOpcode());
           gCodeBuffer->remove();
         }
-        
-        PT_YIELD(&state);  
+       
+       PT_YIELD(&state); 
       }
       
       PT_END(&state);
